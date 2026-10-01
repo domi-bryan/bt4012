@@ -1,1 +1,10 @@
 .DS_Store
+# Data (raw is read-only, processed is regenerable)
+data/raw/
+data/processed/
+
+# Environment
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/

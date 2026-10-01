@@ -1,0 +1,14 @@
+pandas
+pyarrow
+numpy
+scikit-learn>=1.4
+lightgbm
+torch
+shap
+matplotlib
+seaborn
+pytest
+pyyaml
+nbformat
+nbconvert
+ipykernel
