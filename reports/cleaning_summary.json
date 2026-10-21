@@ -1,0 +1,16 @@
+{
+  "input": "data/processed/joined.parquet",
+  "output": "data/processed/cleaned.parquet",
+  "rows": 590540,
+  "columns": 436,
+  "validation_passed": true,
+  "exact_parquet_roundtrip_passed": true,
+  "rows_removed": 0,
+  "columns_removed": 0,
+  "values_changed": 0,
+  "missing_cells_preserved": 115523073,
+  "policy": "Validate and preserve: the audit found no confirmed errors requiring value changes.",
+  "v_pruning_applied": false,
+  "imputation_scaling_encoding_fitted": false,
+  "eda_run": false
+}

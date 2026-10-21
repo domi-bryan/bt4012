@@ -1,0 +1,214 @@
+models:
+  logreg:
+    F0:
+      params:
+        C: 0.1
+      defaults:
+        C: 1.0
+        max_iter: 1000
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+    F1:
+      params:
+        C: 0.1
+      defaults:
+        C: 1.0
+        max_iter: 1000
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+    F2:
+      params:
+        C: 0.1
+      defaults:
+        C: 1.0
+        max_iter: 1000
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+  rf:
+    F0:
+      params:
+        max_depth: 24
+        min_samples_leaf: 20
+      defaults:
+        n_estimators: 300
+        max_depth: 24
+        min_samples_leaf: 5
+        n_jobs: 6
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+    F1:
+      params:
+        max_depth: 24
+        min_samples_leaf: 20
+      defaults:
+        n_estimators: 300
+        max_depth: 24
+        min_samples_leaf: 5
+        n_jobs: 6
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+    F2:
+      params:
+        max_depth: 24
+        min_samples_leaf: 20
+      defaults:
+        n_estimators: 300
+        max_depth: 24
+        min_samples_leaf: 5
+        n_jobs: 6
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+  lgbm:
+    F0:
+      params:
+        learning_rate: 0.03
+        min_child_samples: 100
+        num_leaves: 127
+        scale_pos_weight: 1.0
+      defaults:
+        n_estimators: 1500
+        num_leaves: 63
+        learning_rate: 0.05
+        min_child_samples: 100
+        scale_pos_weight: balanced
+        n_jobs: 6
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+    F1:
+      params:
+        learning_rate: 0.1
+        min_child_samples: 100
+        num_leaves: 127
+        scale_pos_weight: balanced
+      defaults:
+        n_estimators: 1500
+        num_leaves: 63
+        learning_rate: 0.05
+        min_child_samples: 100
+        scale_pos_weight: balanced
+        n_jobs: 6
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+    F2:
+      params:
+        learning_rate: 0.1
+        min_child_samples: 20
+        num_leaves: 127
+        scale_pos_weight: 1.0
+      defaults:
+        n_estimators: 1500
+        num_leaves: 63
+        learning_rate: 0.05
+        min_child_samples: 100
+        scale_pos_weight: balanced
+        n_jobs: 6
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+  mlp:
+    F0:
+      params:
+        dropout: 0.3
+        hidden: 256
+        lr: 0.001
+      defaults:
+        hidden: 256
+        dropout: 0.2
+        lr: 0.001
+        batch_size: 2048
+        max_epochs: 40
+        patience: 5
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+    F1:
+      params:
+        dropout: 0.3
+        hidden: 256
+        lr: 0.001
+      defaults:
+        hidden: 256
+        dropout: 0.2
+        lr: 0.001
+        batch_size: 2048
+        max_epochs: 40
+        patience: 5
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+    F2:
+      params:
+        dropout: 0.3
+        hidden: 256
+        lr: 0.001
+      defaults:
+        hidden: 256
+        dropout: 0.2
+        lr: 0.001
+        batch_size: 2048
+        max_epochs: 40
+        patience: 5
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+feature_config: config/features.yaml (provisional until group approval)
+lightgbm_early_stopping:
+  metric: sklearn average_precision_score
+  patience: 50
+  max_rounds: 1500
+  weight_rule: '''balanced'' resolves to negative/positive labels in each training
+    part'
+  note: Per-fit best iteration and resolved weight are in log params._fit.
+mlp_training:
+  layers: Linear(n, hidden) ReLU Dropout, Linear(hidden, hidden//2) ReLU Dropout,
+    Linear(., 1)
+  loss: BCEWithLogitsLoss(pos_weight = negatives / positives of the training part)
+  optimizer: Adam
+  batch_size: 2048
+  early_stopping: validation PR-AUC, patience 5, max 40 epochs, best epoch restored
+  device: cpu, 4 threads
+  note: Per-fit loss and validation PR-AUC by epoch are in log params._fit.

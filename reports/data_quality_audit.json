@@ -1,0 +1,115 @@
+{
+  "scope": {
+    "structural_checks": "raw key/core columns and full saved join",
+    "quality_statistics": "first 472432 rows by time (training only)",
+    "data_modified": false,
+    "model_fitted_or_test_scored": false
+  },
+  "rows": 590540,
+  "columns": 436,
+  "train_rows": 472432,
+  "checks": {
+    "expected_transaction_count": true,
+    "expected_identity_count": true,
+    "raw_transaction_ids_unique_nonmissing": true,
+    "raw_identity_ids_unique_nonmissing": true,
+    "joined_ids_unique_nonmissing": true,
+    "identity_ids_all_in_transactions": true,
+    "raw_core_columns_match_saved_join": true,
+    "time_and_id_order_correct": true,
+    "time_nondecreasing": true,
+    "transaction_day_correct": true,
+    "identity_flag_correct": true,
+    "binary_nonmissing_target": true,
+    "column_names_unique": true,
+    "unmatched_identity_fields_all_missing": true
+  },
+  "all_structural_checks_pass": true,
+  "training": {
+    "fraud_count": 16599,
+    "fraud_rate": 0.03513521522674162,
+    "duplicate_full_rows_beyond_first": 0,
+    "duplicate_predictor_rows_beyond_first": 2,
+    "rows_in_repeated_predictor_groups": 4,
+    "columns_with_missing": 414,
+    "columns_over_90pct_missing": [
+      "id_24",
+      "id_25",
+      "id_07",
+      "id_08",
+      "id_21",
+      "id_26",
+      "id_22",
+      "id_23",
+      "id_27",
+      "D7",
+      "dist2",
+      "id_18"
+    ],
+    "all_missing_columns": [],
+    "constant_nonmissing_columns": [],
+    "infinite_values": 0,
+    "blank_string_cells": 0,
+    "padded_string_cells": 0,
+    "missing_identity_rows": 351968,
+    "invalid_amount_rows": 0,
+    "negative_time_rows": 0,
+    "amount_quantiles": {
+      "0.0": 0.25099998712539673,
+      "0.25": 42.95000076293945,
+      "0.5": 68.94999694824219,
+      "0.75": 125.0,
+      "0.95": 441.95001220703125,
+      "0.99": 1104.0,
+      "1.0": 31937.390625
+    },
+    "most_missing_columns": [
+      {
+        "column": "id_24",
+        "missing_pct": 99.17152098079724
+      },
+      {
+        "column": "id_25",
+        "missing_pct": 99.10124631693027
+      },
+      {
+        "column": "id_07",
+        "missing_pct": 99.0980712568158
+      },
+      {
+        "column": "id_08",
+        "missing_pct": 99.0980712568158
+      },
+      {
+        "column": "id_21",
+        "missing_pct": 99.0976479154672
+      },
+      {
+        "column": "id_26",
+        "missing_pct": 99.09680123277
+      },
+      {
+        "column": "id_22",
+        "missing_pct": 99.09553120872422
+      },
+      {
+        "column": "id_23",
+        "missing_pct": 99.09553120872422
+      },
+      {
+        "column": "id_27",
+        "missing_pct": 99.09553120872422
+      },
+      {
+        "column": "D7",
+        "missing_pct": 93.66173332881769
+      }
+    ]
+  },
+  "interpretation": [
+    "Missing identity is expected from the left join; retain missingness.",
+    "Negative anonymized feature values and extreme amounts are not automatically errors.",
+    "Repeated predictors are diagnostic only, not authorization to delete transactions.",
+    "V-column pruning remains proposed; no columns were removed."
+  ]
+}
