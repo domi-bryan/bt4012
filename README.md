@@ -198,7 +198,20 @@ Rebuilds `reports/grid_validation.md` from the validation rows of `results/log.c
 in the top 1%, with the LR → LightGBM and F0 → F2 gains. It refuses to build if any cell is
 missing a seed or has a repeated one.
 
-## 11. Run the tests
+## 11. Leakage check (Step 12)
+
+```bash
+OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/python -u -m src.leakage
+```
+
+Scores LR and LightGBM on F2 (Step 9 best configs) inside the train block under random
+stratified 5-fold and StratifiedGroupKFold on uid (seed 0), logging each fold with
+`cv_scheme` "random" or "group_uid". The time-CV rows for the same configs come from Step 9.
+About 30 minutes and 2 GB peak memory; it resumes rather than duplicating rows and checks
+`results/step12_manifest.json`. `--report` only rebuilds `reports/leakage_check.md` from the
+log. `notebooks/05_leakage.ipynb` reads the log and saves `reports/figures/leakage_check.png`.
+
+## 12. Run the tests
 
 ```bash
 .venv/bin/python -m pytest -q tests

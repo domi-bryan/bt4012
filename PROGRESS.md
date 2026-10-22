@@ -261,3 +261,27 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
 - Open:
   - **RQ3 reading (validation, provisional):** the model gain (LR → LightGBM, +0.28 to +0.31 PR-AUC) is roughly ten times the largest feature-set gain (F0 → F2, +0.033 for LightGBM). Customer history helps LightGBM most, helps RF and LR a little, and is within seed noise for the MLP. Final claims should wait for the leakage check (Step 12) and test scoring (Step 15).
   - Results stay provisional on the unapproved V-column list. LightGBM and the MLP early-stop on the validation block, which slightly favours them in this table.
+
+## Step 12: Leakage check (2026-10-22) — PROVISIONAL (V list)
+- Built: `src/leakage.py` (run `.venv/bin/python -u -m src.leakage`; `--report` rebuilds the report only), `reports/leakage_check.md`, executed `notebooks/05_leakage.ipynb`, `reports/figures/leakage_check.png`, `results/step12_manifest.json`, `tests/test_leakage.py`, `tests/conftest.py`, README section 11.
+- Method: LR (C = 0.1) and LightGBM (num_leaves 127, learning_rate 0.1, min_child_samples 20, scale_pos_weight 1.0) on F2 with their Step 9 best configs, inside the train block only. New: random stratified 5-fold (`cv_scheme` "random") and StratifiedGroupKFold on uid (`cv_scheme` "group_uid"), seed 0, 20 fits. Reused: the 4 Step 9 time-CV rows per model with the same config, as requested. Every fold refits its pipeline on its training part; LightGBM early-stops on the fold's validation part, as in time CV.
+- Checks:
+  - The report table has 6 cells, each built from the log: pass. `leakage_table` reads only `results/log.csv` and raises unless each cell has exactly one row per fold (5, 5, 4).
+  - The report states which scheme scored highest and by how much, using the logged numbers: pass (random, for both models; margins below).
+  - Extra: the log grew from 468 to 488 rows; the earlier 468 are byte-identical to a pre-run backup; no test rows. Group folds share no uid between sides (tested on toy data; the split function was already tested on card1). Fast suites: 78 passed.
+- Numbers (PR-AUC, mean ± sample std over folds, from `reports/leakage_check.md`):
+
+  | Model | Random 5-fold | Group on uid 5-fold | Time CV (4) |
+  | --- | --- | --- | --- |
+  | LR | 0.4546 ± 0.0085 | 0.4310 ± 0.0206 | 0.4257 ± 0.0163 |
+  | LightGBM | **0.8756** ± 0.0052 | 0.5909 ± 0.0148 | 0.6416 ± 0.0536 |
+
+  Random scores highest for both. LR: +0.0236 over group, +0.0289 over time. LightGBM: +0.2846 over group (+48.2%), +0.2339 over time (+36.5%). Run time 29 min, peak RSS 2.0 GB.
+- Open:
+  - **The leakage is model-dependent.** LightGBM gains 0.23-0.28 PR-AUC from random folds; LR gains only 0.02-0.03. A flexible model can memorise customer-specific patterns, which a linear model cannot. This is the core finding for the report's "why random K-fold misleads" section.
+  - **Group < time for LightGBM** (0.591 vs 0.642). Group folds hold out whole customers, so every validation row is a customer never seen in training. In time CV many validation customers already have history from earlier months (Step 7: about 47% of later rows are returning uids), and F2 encodes that history. Group folds are therefore a "new customers only" estimate, stricter than deployment. Time CV has the larger spread (fold 4 = 0.711 vs fold 3 = 0.596).
+  - **Random-fold LightGBM fits ran to the tree cap** (best iteration 1,319-1,500 of 1,500), so its random score is if anything understated. Group-fold fits stopped at 146-612.
+  - **Training-size caveat:** random and group folds train on 80% of the block; time folds on 28-88%. That favours the 5-fold schemes, but cannot explain LightGBM's random-vs-group gap, since those two use the same size.
+  - **Two bugs fixed before any fit was logged:** row matching broke on pandas 3 Arrow string columns read from CSV, then on an empty selection. The aborted runs logged nothing; their manifest was deleted and rewritten by the successful run. A CSV-roundtrip test now covers both.
+  - **Test crash fixed:** importing LightGBM before training a torch model segfaults on macOS (two OpenMP runtimes). `tests/conftest.py` imports torch first. The training commands were not affected (`train_mlp` imports torch first), but any future script that trains the MLP should do the same.
+  - `git diff --check` flags `results/log.csv` because `log_run` writes CRLF line endings (Python csv default); this was true of the committed rows already and is harmless.
