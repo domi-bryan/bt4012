@@ -213,6 +213,10 @@ log. `notebooks/05_leakage.ipynb` reads the log and saves `reports/figures/leaka
 
 ## 12. Run the tests
 
+For the optional CatBoost extension, install `requirements-catboost.txt` and see
+[CATBOOST.md](CATBOOST.md) for tuning, sensitivity analysis, encoding policy and
+the dependency on the open shared implementation PR.
+
 ```bash
 .venv/bin/python -m pytest -q tests
 ```

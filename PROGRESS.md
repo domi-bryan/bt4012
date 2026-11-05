@@ -1,5 +1,12 @@
 # Progress log: BT4012 Group 11 fraud detection (one entry per finished step)
 
+## Optional CatBoost implementation (2026-11-05)
+- Base: open team PR #1, `jarren/steps-3-11`, commit `13a1e65628c87c573c76c4e6a56be702381c5aae`. Isolated branch `damien/catboost`; original main worktree preserved.
+- Built: `src/catboost_pipeline.py`, `src/models/catboost.py`, `src/train_catboost.py`, `tests/test_catboost.py`, `requirements-catboost.txt`, `CATBOOST.md`; README links the extension. Shared builders, splitters, experiment functions, metrics and logging are reused without changes. No shared experiment results or best-parameter settings were changed.
+- Checks: CatBoost suite 11 passed. Full suite 81 passed, 11 skipped for absent real data, using the existing PyTorch `libomp` through process-local `DYLD_LIBRARY_PATH` to satisfy the shared LightGBM import. `pip check`, CLI help, missing-data diagnostic, fresh-process shared-model training and diff whitespace checks passed. Tests inspect the CatBoost JSON for absence of target statistics, preserve numeric card1, exclude raw uid, verify fold-local categories/weights, resume exact fits and reconstruct sensitivity plots from complete logged seeds.
+- Numbers: implementation provides deterministic 20-config time-CV tuning for each of F0/F1/F2, validation seeds 0/1/2, and 21 one-parameter F2 sensitivity configurations (63 fits). No real-data CatBoost scores are available or claimed.
+- Open: raw/processed data is absent, so full tuning and sensitivity experiments remain to run. Upstream V-column approval is pending. The locked four-model summary, leakage comparison and final-test scoring do not yet include CatBoost. PR stacking/retargeting instructions and the conservative internal one-hot categorical policy are documented in `CATBOOST.md`. This entry does not mark the team's Step 13 complete.
+
 ## Step 0: Environment and data check (2026-10-01)
 - Built: `requirements.txt`, `.gitignore` (added `data/raw/`, `data/processed/`, `.venv/`, caches), `src/__init__.py`, `src/models/__init__.py`, `results/.gitkeep`, folders `src/ src/models/ tests/ notebooks/ reports/ reports/figures/ config/ results/ data/processed/`, `.venv/` (Python 3.13.5).
 - Checks:
