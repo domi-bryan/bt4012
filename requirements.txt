@@ -3,6 +3,7 @@ pyarrow
 numpy
 scikit-learn>=1.4
 lightgbm
+xgboost
 torch
 shap
 matplotlib
