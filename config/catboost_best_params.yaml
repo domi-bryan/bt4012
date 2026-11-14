@@ -1,0 +1,66 @@
+models:
+  catboost:
+    F0:
+      params:
+        depth: 8
+        l2_leaf_reg: 3.0
+        learning_rate: 0.1
+        scale_pos_weight: 1.0
+      defaults:
+        iterations: 1500
+        depth: 6
+        learning_rate: 0.05
+        l2_leaf_reg: 3.0
+        scale_pos_weight: balanced
+        thread_count: 6
+        early_stopping_rounds: 50
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+      categorical_mode: one_hot_no_target_statistics
+    F1:
+      params:
+        depth: 8
+        l2_leaf_reg: 3.0
+        learning_rate: 0.1
+        scale_pos_weight: 1.0
+      defaults:
+        iterations: 1500
+        depth: 6
+        learning_rate: 0.05
+        l2_leaf_reg: 3.0
+        scale_pos_weight: balanced
+        thread_count: 6
+        early_stopping_rounds: 50
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+      categorical_mode: one_hot_no_target_statistics
+    F2:
+      params:
+        depth: 8
+        l2_leaf_reg: 3.0
+        learning_rate: 0.1
+        scale_pos_weight: 1.0
+      defaults:
+        iterations: 1500
+        depth: 6
+        learning_rate: 0.05
+        l2_leaf_reg: 3.0
+        scale_pos_weight: balanced
+        thread_count: 6
+        early_stopping_rounds: 50
+      cv_scheme: time
+      search_seed: 0
+      validation_seeds:
+      - 0
+      - 1
+      - 2
+      categorical_mode: one_hot_no_target_statistics
+feature_config: config/features.yaml (same approval status as shared implementation)

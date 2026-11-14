@@ -1,0 +1,193 @@
+{
+  "best_path": "/Users/damienkoh/Downloads/Dom bt4012/bt4012/config/catboost_best_params.yaml",
+  "categorical_mode": "one_hot_no_target_statistics",
+  "defaults": {
+    "depth": 6,
+    "early_stopping_rounds": 50,
+    "iterations": 1500,
+    "l2_leaf_reg": 3.0,
+    "learning_rate": 0.05,
+    "scale_pos_weight": "balanced",
+    "thread_count": 6
+  },
+  "grid": [
+    {
+      "depth": 8,
+      "l2_leaf_reg": 3.0,
+      "learning_rate": 0.1,
+      "scale_pos_weight": "balanced"
+    },
+    {
+      "depth": 6,
+      "l2_leaf_reg": 10.0,
+      "learning_rate": 0.03,
+      "scale_pos_weight": 1.0
+    },
+    {
+      "depth": 6,
+      "l2_leaf_reg": 3.0,
+      "learning_rate": 0.03,
+      "scale_pos_weight": 1.0
+    },
+    {
+      "depth": 8,
+      "l2_leaf_reg": 3.0,
+      "learning_rate": 0.1,
+      "scale_pos_weight": 1.0
+    },
+    {
+      "depth": 6,
+      "l2_leaf_reg": 10.0,
+      "learning_rate": 0.1,
+      "scale_pos_weight": 1.0
+    },
+    {
+      "depth": 6,
+      "l2_leaf_reg": 1.0,
+      "learning_rate": 0.1,
+      "scale_pos_weight": "balanced"
+    },
+    {
+      "depth": 4,
+      "l2_leaf_reg": 10.0,
+      "learning_rate": 0.1,
+      "scale_pos_weight": 1.0
+    },
+    {
+      "depth": 4,
+      "l2_leaf_reg": 1.0,
+      "learning_rate": 0.1,
+      "scale_pos_weight": 1.0
+    },
+    {
+      "depth": 4,
+      "l2_leaf_reg": 10.0,
+      "learning_rate": 0.1,
+      "scale_pos_weight": "balanced"
+    },
+    {
+      "depth": 8,
+      "l2_leaf_reg": 3.0,
+      "learning_rate": 0.03,
+      "scale_pos_weight": "balanced"
+    },
+    {
+      "depth": 8,
+      "l2_leaf_reg": 1.0,
+      "learning_rate": 0.1,
+      "scale_pos_weight": "balanced"
+    },
+    {
+      "depth": 8,
+      "l2_leaf_reg": 10.0,
+      "learning_rate": 0.1,
+      "scale_pos_weight": "balanced"
+    },
+    {
+      "depth": 8,
+      "l2_leaf_reg": 10.0,
+      "learning_rate": 0.03,
+      "scale_pos_weight": "balanced"
+    },
+    {
+      "depth": 8,
+      "l2_leaf_reg": 3.0,
+      "learning_rate": 0.03,
+      "scale_pos_weight": 1.0
+    },
+    {
+      "depth": 8,
+      "l2_leaf_reg": 10.0,
+      "learning_rate": 0.03,
+      "scale_pos_weight": 1.0
+    },
+    {
+      "depth": 4,
+      "l2_leaf_reg": 10.0,
+      "learning_rate": 0.03,
+      "scale_pos_weight": 1.0
+    },
+    {
+      "depth": 6,
+      "l2_leaf_reg": 1.0,
+      "learning_rate": 0.03,
+      "scale_pos_weight": "balanced"
+    },
+    {
+      "depth": 4,
+      "l2_leaf_reg": 3.0,
+      "learning_rate": 0.03,
+      "scale_pos_weight": "balanced"
+    },
+    {
+      "depth": 6,
+      "l2_leaf_reg": 3.0,
+      "learning_rate": 0.03,
+      "scale_pos_weight": "balanced"
+    },
+    {
+      "depth": 6,
+      "l2_leaf_reg": 1.0,
+      "learning_rate": 0.1,
+      "scale_pos_weight": 1.0
+    }
+  ],
+  "log_path": "/Users/damienkoh/Downloads/Dom bt4012/bt4012/results/log.csv",
+  "search_seed": 0,
+  "sensitivity": {
+    "depth": [
+      3,
+      4,
+      6,
+      8,
+      10
+    ],
+    "l2_leaf_reg": [
+      0.1,
+      1.0,
+      3.0,
+      10.0,
+      30.0
+    ],
+    "learning_rate": [
+      0.01,
+      0.03,
+      0.05,
+      0.1,
+      0.3
+    ],
+    "scale_pos_weight": [
+      1.0,
+      3.0,
+      10.0,
+      30.0,
+      100.0,
+      "balanced"
+    ]
+  },
+  "sha256": {
+    "config/features.yaml": "b12a592dda85d818a4715e2295483770a1dfc0ab16c148cf2263fc4f036c3591",
+    "processed_data": "805fab98d1991fdac7dfd7d6883b35941ea0c55268693d11490a4496d61461f0",
+    "src/catboost_pipeline.py": "6a7d36fa2e28083d9738c4c8de269c87d16a99714a4b9efe1a117f40893a776a",
+    "src/data.py": "43a3cf3d7700a18d61ebb4976044eb568f7da15b9441fcce4a30c4fc1d05ccf3",
+    "src/experiment.py": "4d8d8e6ee7b225dd043fa034265f32569b249c1787c51b2fc10d34a51b9708bd",
+    "src/features.py": "e3839d96942d393b14a150680e4990ee96b5fe8349488965cd78732beab6fe0a",
+    "src/metrics.py": "0b927dea8d8f9d5a865fd15763053112926dbadbe184e08424d5d0db41140376",
+    "src/models/catboost.py": "436e837c4928833a9182684967b6f1f25d502a01ab0dba1a9f2e79bfd28716f1",
+    "src/results.py": "3c978c3e55ab4fa73d19e3961f36ff9e2bf85c9fd211cb0d82213c526c499a52",
+    "src/split.py": "9fdc9351fc049bd3c2fb5b0ba4a63c10d78116b7dfd1fb8d32a6edcc5f30c1ac",
+    "src/train_catboost.py": "05eeda16a8b4479150335d5681b238a06c7dc9e4398012d27bef3b1204e7febc"
+  },
+  "validation_seeds": [
+    0,
+    1,
+    2
+  ],
+  "versions": {
+    "catboost": "1.2.10",
+    "numpy": "2.5.4",
+    "pandas": "3.1.1",
+    "scikit-learn": "1.9.1",
+    "torch": "2.15.0"
+  }
+}
