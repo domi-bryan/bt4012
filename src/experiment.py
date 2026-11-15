@@ -134,3 +134,119 @@ def already_logged(model_name, feature_set, log_path=LOG_PATH):
     except FileNotFoundError:
         return 0
     return int(((log["model"] == model_name) & (log["feature_set"] == feature_set)).sum())
+
+
+# ---------------------------------------------------------------------------
+# G0-G3 runs used by the model notebooks (notebooks/04_*.ipynb to 09_*.ipynb).
+
+from src.data import ROOT  # noqa: E402
+
+PREDS_DIR = ROOT / "results" / "preds"
+VAL_SEEDS = (0, 1, 2)
+
+
+def save_predictions(path, df, idx, score, **meta):
+    """One parquet per run: TransactionID, label and score for the scored rows, plus `meta` columns."""
+    part = df.iloc[idx]
+    out = pd.DataFrame({"TransactionID": part["TransactionID"].to_numpy(),
+                        "isFraud": part["isFraud"].to_numpy(), "score": np.asarray(score, dtype="float64")})
+    for key, value in meta.items():
+        out[key] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    out.to_parquet(path, index=False)
+    return path
+
+
+def oof_predictions(model, make_pipeline, df, train_idx, params, feature_set, seed=0,
+                    preds_dir=PREDS_DIR):
+    """Refit `params` on each time-CV fold and save the fold-validation scores (not logged).
+
+    Covers the rows of folds 1-4 (days 31 to 141). Used to train a stacking model later.
+    """
+    path = preds_dir / f"{model.NAME}_{feature_set}_oof_seed{seed}.parquet"
+    if path.exists():
+        return path
+    parts = []
+    for k, (a, b) in enumerate(time_cv_folds(df, train_idx), start=1):
+        pipe = make_pipeline().fit(df.iloc[a])
+        Xa, ya = _xy(pipe, df, a)
+        Xb, yb = _xy(pipe, df, b)
+        _, score, _ = _fit_score(model, Xa, ya, Xb, yb, params, seed)
+        parts.append(pd.DataFrame({"TransactionID": df["TransactionID"].iloc[b].to_numpy(),
+                                   "isFraud": yb, "score": score, "fold": k}))
+    out = pd.concat(parts, ignore_index=True)
+    out["params"] = json.dumps(params, sort_keys=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    out.to_parquet(path, index=False)
+    return path
+
+
+def tune_and_validate(model, make_pipeline, df, train_idx, val_idx, feature_sets, grid,
+                      tune_on=None, seeds=VAL_SEEDS, log_path=LOG_PATH, preds_dir=PREDS_DIR,
+                      save_oof=False):
+    """Tune with time CV (seed 0), then validate the chosen settings with each seed.
+
+    `feature_sets` maps a set name (e.g. "G3") to its column list; `make_pipeline(columns)`
+    returns an unfitted pipeline. With `tune_on=None` every set is tuned separately; with a
+    set name (e.g. "G3"), tuning runs on that set only and its best settings are validated on
+    every set, so the sets are compared with the model settings held fixed.
+
+    Everything already in the log is skipped, so a notebook can be stopped and rerun.
+    Validation scores are saved to `preds_dir`; with `save_oof` the time-CV fold scores of
+    the chosen settings are saved too. Returns {set name: chosen params}.
+    """
+    if tune_on is not None and tune_on not in feature_sets:
+        raise ValueError(f"tune_on={tune_on!r} is not one of {list(feature_sets)}")
+    tuned = {}
+    for name in ([tune_on] if tune_on else list(feature_sets)):
+        cols = feature_sets[name]
+        print(f"\n{model.NAME}/{name}: tuning {len(grid)} settings with time CV (seed 0)", flush=True)
+        cv = time_cv(model, lambda cols=cols: make_pipeline(cols), df, train_idx, grid, name,
+                     seed=0, log_path=log_path, resume=True)
+        tuned[name] = best_params(cv)
+        print(f"{model.NAME}/{name}: best {tuned[name]}", flush=True)
+    chosen = {name: tuned[tune_on] if tune_on else tuned[name] for name in feature_sets}
+    for name, params in chosen.items():
+        cols = feature_sets[name]
+        build = lambda cols=cols: make_pipeline(cols)
+        for seed in seeds:
+            path = preds_dir / f"{model.NAME}_{name}_val_seed{seed}.parquet"
+            if logged_run(model.NAME, name, "val", seed, params, log_path) is not None:
+                note = "" if path.exists() else " (scores not saved; delete its log row to rerun)"
+                print(f"{model.NAME}/{name} seed {seed}: validation already logged{note}", flush=True)
+                continue
+            val = fit_validate(model, build, df, train_idx, val_idx, params, name, seed=seed,
+                               log_path=log_path)
+            save_predictions(path, df, val_idx, val["score"], seed=seed,
+                             params=json.dumps(params, sort_keys=True))
+            print(f"{model.NAME}/{name} seed {seed}: val pr_auc={val['pr_auc']:.4f} "
+                  f"auroc={val['auroc']:.4f} ({val['runtime_s']:.0f}s)", flush=True)
+            del val
+        if save_oof:
+            oof_predictions(model, build, df, train_idx, params, name, seed=0, preds_dir=preds_dir)
+    return chosen
+
+
+def run_summary(model_name, feature_sets, log_path=LOG_PATH):
+    """(cv, val) tables for one model from the log, for the G sets given.
+
+    cv: mean time-CV PR-AUC per set and settings (folds counted). val: mean and sample std over
+    seeds of PR-AUC, AUROC and recall in the top 1% per set, with the settings validated.
+    """
+    log = pd.read_csv(log_path)
+    log = log[(log["model"] == model_name) & (log["feature_set"].isin(list(feature_sets)))]
+
+    def inputs(p):
+        d = json.loads(p)
+        return json.dumps({k: v for k, v in d.items() if k not in ("fold", "threshold", "_fit")},
+                          sort_keys=True)
+
+    cv = log[log["split"] == "cv"].assign(settings=lambda t: t["params"].map(inputs))
+    cv = (cv.groupby(["feature_set", "settings"])["pr_auc"].agg(["mean", "std", "count"])
+          .rename(columns={"mean": "cv_pr_auc", "std": "cv_std", "count": "folds"})
+          .reset_index().sort_values(["feature_set", "cv_pr_auc"], ascending=[True, False]))
+    val = log[log["split"] == "val"].assign(settings=lambda t: t["params"].map(inputs))
+    metrics = ["pr_auc", "auroc", "recall_top1pct"]
+    val = val.groupby(["feature_set", "settings"]).agg(
+        **{f"{m}_{s}": (m, s) for m in metrics for s in ("mean", "std")}, seeds=("seed", "nunique"))
+    return cv.reset_index(drop=True), val.reset_index()

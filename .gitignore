@@ -11,3 +11,6 @@ __pycache__/
 
 # Notebooks are committed with outputs. Figure PNGs are rebuilt by the notebooks.
 reports/figures/*.png
+
+# Saved model predictions (large; rebuilt by the model notebooks)
+results/preds/

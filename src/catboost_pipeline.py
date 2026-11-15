@@ -14,12 +14,13 @@ class CatBoostPipeline(TreePipeline):
     card1 remains numeric; raw uid is never an input to the shared F0/F1/F2 models.
     """
 
-    def __init__(self, v_drop=None):
-        super().__init__(kind="lgbm", v_drop=v_drop)
+    def __init__(self, v_drop=None, columns=None):
+        super().__init__(kind="lgbm", v_drop=v_drop, columns=columns)
 
     def fit(self, train_df):
-        if "uid" in train_df:
-            raise ValueError("Use build_feature_set: raw uid must not be a model input")
+        selected = train_df.columns if self.columns is None else self.columns
+        if "uid" in selected:
+            raise ValueError("The raw uid column must not be a model input")
         if "card1" in train_df and not pd.api.types.is_numeric_dtype(train_df.card1):
             raise ValueError("card1 must remain numeric, as in the shared pipelines")
         super().fit(train_df)

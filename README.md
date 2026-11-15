@@ -4,7 +4,8 @@ Benchmark of fraud detection models (logistic regression, random forest, LightGB
 
 Notebooks, in reading order: `01_eda` (exploratory analysis) → `02_feature_engineering` (builds `features_v2`
 and the G0–G3 feature groups) → `03_v_threshold` (chooses the V-column threshold, r = 0.75) → one notebook per
-model (being added) → `11_leakage_check`. Superseded notebooks are in `notebooks/archive/`.
+model (`04_logreg` to `09_mlp`) → `10_model_comparison` → `11_leakage_check`. Superseded notebooks are in
+`notebooks/archive/`.
 
 ## 1. Set up the environment
 
@@ -109,7 +110,42 @@ To regenerate only the tables and findings report:
 .venv/bin/python -m src.eda
 ```
 
-## 6. Logistic regression baseline (Step 6)
+## 6. Feature engineering and the model notebooks (G0–G3)
+
+Build the feature table once (a few minutes):
+
+```bash
+.venv/bin/python -m nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 notebooks/02_feature_engineering.ipynb
+```
+
+This writes `data/processed/features_v2.parquet` (gitignored) and `config/features_v2.yaml`, which defines four
+cumulative feature sets: G0 raw columns (197) → G1 + row-level features (224) → G2 + card and device history (234)
+→ G3 + customer history (252). `notebooks/03_v_threshold.ipynb` documents the V-column threshold (r = 0.75).
+
+Each model has its own notebook: `04_logreg`, `05_random_forest`, `06_lightgbm`, `07_xgboost`, `08_catboost`,
+`09_mlp`. They all follow the same steps and call the same code, so their results are comparable:
+
+1. `src.feature_sets.load_features()` loads `features_v2` with the test block already removed, and
+   `feature_list("G0")` … `("G3")` gives each set's columns.
+2. `src.experiment.tune_and_validate()` tunes the model's settings grid (`GRID` in `src/models/<model>.py`) with
+   time CV inside the training block (seed 0), then refits the best settings on the whole training block with
+   seeds 0, 1 and 2 and scores the validation block. By default (`TUNE_ON = "G3"`) it tunes once on G3 and
+   validates those settings on every set; `TUNE_ON = None` tunes each set separately.
+3. Every fit appends a row to `results/log.csv`, and anything already logged is skipped, so a notebook can be
+   stopped and rerun. Validation scores (and, with `SAVE_OOF`, the time-CV fold scores of the chosen settings) are
+   saved to `results/preds/` (gitignored) for the comparison and a possible ensemble.
+
+`10_model_comparison.ipynb` reads the log and shows every model × feature set (mean ± sd over seeds), what each
+feature group adds, and returning vs new customers. Run the model notebooks in Jupyter or with the `nbconvert`
+command above (use a long timeout, e.g. `--ExecutePreprocessor.timeout=-1`, as full tuning can take hours).
+
+On macOS, XGBoost, PyTorch and LightGBM each ship their own OpenMP library and can crash when combined in one
+process. Each model notebook imports only its own model library first, which is safe; don't train several model
+libraries in one kernel. The XGBoost test runs in a separate process for the same reason.
+
+Sections 7 to 13 describe the earlier F0–F2 experiments (Steps 6–12), kept for reference.
+
+## 7. Logistic regression baseline (Step 6)
 
 ```bash
 .venv/bin/python -m src.models.logreg
@@ -121,7 +157,7 @@ append a row to `results/log.csv` (about 13 minutes, 1.5 GB peak memory). It ref
 again for the same feature set unless you pass `--force`. The results notebook for
 these runs is archived as `notebooks/archive/02_baseline.ipynb`.
 
-## 7. Customer ID check (Step 7)
+## 8. Customer ID check (Step 7)
 
 ```bash
 .venv/bin/python -m src.features
@@ -131,7 +167,7 @@ Builds uid = card1 + addr1 + floor(TransactionDay - D1) (`add_uid` in `src/featu
 writes `reports/uid_check.md`: group counts and sizes, fraud concentration on the train block,
 and how many validation/test customers already appear in earlier blocks. Takes a few seconds.
 
-## 8. Features and tree models (Steps 8–9)
+## 9. Features and tree models (Steps 8–9)
 
 `build_feature_set(df, "F1")` adds prior card history; `"F2"` also adds prior customer
 history. Definitions and tied-timestamp conventions are in `reports/feature_dictionary.md`.
@@ -171,7 +207,7 @@ generates `reports/figures/trees_validation.png` from the log. The completed Ste
 results and per-seed runtimes are recorded in `PROGRESS.md`. Results remain
 provisional on the V-column proposal.
 
-## 9. MLP (Step 10)
+## 10. MLP (Step 10)
 
 ```bash
 .venv/bin/python -u -m src.train_mlp
@@ -188,7 +224,7 @@ since `results/step10_manifest.json` was written. Per-epoch loss and validation 
 stored in each log row's `params._fit`; the archived
 `notebooks/archive/04_mlp.ipynb` read them and saved `reports/figures/mlp_training_curves.png`.
 
-## 10. CatBoost
+## 11. CatBoost
 
 ```bash
 .venv/bin/python -u -m src.train_catboost --mode tune         # time-CV tuning on F0, F1, F2, then validation seeds 0, 1, 2
@@ -214,7 +250,7 @@ the largest training cardinality), so no target statistics are computed and noth
 target-encoded. Raw `uid` is rejected as an input, and rows keep their time order
 (`has_time=True`).
 
-## 11. Validation grid summary (Step 11)
+## 12. Validation grid summary (Step 11)
 
 ```bash
 .venv/bin/python -m src.summarise
@@ -225,7 +261,7 @@ Rebuilds `reports/grid_validation.md` from the validation rows of `results/log.c
 in the top 1%, with the LR → LightGBM and F0 → F2 gains. It refuses to build if any cell is
 missing a seed or has a repeated one.
 
-## 12. Leakage check (Step 12)
+## 13. Leakage check (Step 12)
 
 ```bash
 OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/python -u -m src.leakage
@@ -238,7 +274,7 @@ About 30 minutes and 2 GB peak memory; it resumes rather than duplicating rows a
 `results/step12_manifest.json`. `--report` only rebuilds `reports/leakage_check.md` from the
 log. `notebooks/11_leakage_check.ipynb` reads the log and saves `reports/figures/leakage_check.png`.
 
-## 13. Run the tests
+## 14. Run the tests
 
 ```bash
 .venv/bin/python -m pytest -q tests

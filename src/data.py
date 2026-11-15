@@ -158,16 +158,21 @@ def _is_cat(series):
 class TreePipeline:
     """Tree input. kind="lgbm" keeps NaN and `category` dtypes; kind="rf" fills NaN with -999
     and turns categoricals into integer codes. Category levels are the ones seen in training
-    rows; levels first seen later become missing."""
+    rows; levels first seen later become missing.
 
-    def __init__(self, kind="lgbm", v_drop=None):
+    `columns` fixes the input columns (e.g. a G0-G3 list from `src.feature_sets`); without it
+    the columns come from `feature_columns` and the V list in config/features.yaml."""
+
+    def __init__(self, kind="lgbm", v_drop=None, columns=None):
         if kind not in ("lgbm", "rf"):
             raise ValueError("kind must be 'lgbm' or 'rf'")
         self.kind = kind
         self.v_drop = v_drop
+        self.columns = None if columns is None else list(columns)
 
     def fit(self, train_df):
-        self.columns_ = feature_columns(train_df, self.v_drop)
+        self.columns_ = (list(self.columns) if self.columns is not None
+                         else feature_columns(train_df, self.v_drop))
         self.categories_ = {c: train_df[c].dropna().unique().astype(str).tolist()
                             for c in self.columns_ if _is_cat(train_df[c])}
         for levels in self.categories_.values():
@@ -194,13 +199,16 @@ class LinearPipeline:
     """LR and MLP input. Numeric columns: train median imputation, a missing indicator (for
     columns with any missing training value) and standard scaling. Categoricals with <= 20
     training levels: one-hot plus a missing column; the rest: training frequency encoding.
-    Output is a float32 DataFrame with no NaN."""
+    Output is a float32 DataFrame with no NaN. `columns` fixes the input columns, as in
+    `TreePipeline`."""
 
-    def __init__(self, v_drop=None):
+    def __init__(self, v_drop=None, columns=None):
         self.v_drop = v_drop
+        self.columns = None if columns is None else list(columns)
 
     def fit(self, train_df):
-        cols = feature_columns(train_df, self.v_drop)
+        cols = (list(self.columns) if self.columns is not None
+                else feature_columns(train_df, self.v_drop))
         self.numeric_ = [c for c in cols if not _is_cat(train_df[c])]
         cats = [c for c in cols if _is_cat(train_df[c])]
         self.medians_, self.means_, self.stds_, self.indicators_ = {}, {}, {}, []
