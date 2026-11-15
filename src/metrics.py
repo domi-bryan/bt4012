@@ -26,6 +26,21 @@ def recall_top1pct(y_true, y_score, fraction=TOP_FRACTION):
     return float(caught / n_pos)
 
 
+def top_rows(n, fraction=TOP_FRACTION):
+    """Number of rows in the top `fraction` of a block of n rows: ceil(fraction * n)."""
+    return int(np.ceil(fraction * n))
+
+
+def precision_top1pct(y_true, y_score, fraction=TOP_FRACTION):
+    """Share of the top `fraction` of scores that are fraud (ties shared as in `recall_top1pct`).
+
+    For the same rows it equals recall_top1pct * n_fraud / top_rows(n), so both rank models the
+    same way; precision reads more easily because recall here is capped at top_rows(n) / n_fraud.
+    """
+    y_true = np.asarray(y_true)
+    return float(recall_top1pct(y_true, y_score, fraction) * y_true.sum() / top_rows(len(y_true), fraction))
+
+
 def pick_threshold(y_true, y_score):
     """Threshold that maximises F1 on the given (validation) data; predict fraud when score >= it."""
     precision, recall, thresholds = precision_recall_curve(y_true, y_score)

@@ -227,26 +227,49 @@ def tune_and_validate(model, make_pipeline, df, train_idx, val_idx, feature_sets
     return chosen
 
 
-def run_summary(model_name, feature_sets, log_path=LOG_PATH):
+def block_sizes(df, train_idx, val_idx):
+    """{"val": (rows, fraud), "cv": {fold: (rows, fraud)}} for the scored rows of each block."""
+    y = df["isFraud"].to_numpy()
+    folds = {k: (len(b), int(y[b].sum())) for k, (_, b) in enumerate(time_cv_folds(df, train_idx), start=1)}
+    return {"val": (len(val_idx), int(y[val_idx].sum())), "cv": folds}
+
+
+def _precision_top1pct(recall, rows, fraud):
+    from src.metrics import top_rows
+    return recall * fraud / top_rows(rows)
+
+
+def run_summary(model_name, feature_sets, log_path=LOG_PATH, sizes=None):
     """(cv, val) tables for one model from the log, for the G sets given.
 
-    cv: mean time-CV PR-AUC per set and settings (folds counted). val: mean and sample std over
-    seeds of PR-AUC, AUROC and recall in the top 1% per set, with the settings validated.
+    cv: per set and settings, mean over folds of PR-AUC (with sd), AUROC and recall in the top 1%.
+    val: per set and settings, mean and sample sd over seeds of PR-AUC, AUROC, recall in the top 1%,
+    precision and recall at the validation threshold, and the mean threshold.
+    With `sizes` from `block_sizes`, both also get precision in the top 1%, derived from the logged
+    recall (precision = recall * fraud rows / rows flagged), so past runs need no refit.
     """
     log = pd.read_csv(log_path)
-    log = log[(log["model"] == model_name) & (log["feature_set"].isin(list(feature_sets)))]
+    log = log[(log["model"] == model_name) & (log["feature_set"].isin(list(feature_sets)))].copy()
+    params = log["params"].map(json.loads)
+    log["settings"] = params.map(lambda d: json.dumps(
+        {k: v for k, v in d.items() if k not in ("fold", "threshold", "_fit")}, sort_keys=True))
+    log["fold"] = params.map(lambda d: d.get("fold"))
+    log["threshold"] = params.map(lambda d: d.get("threshold"))
+    if sizes is not None:
+        def prec(r):
+            rows, fraud = sizes["val"] if r["split"] == "val" else sizes["cv"][int(r["fold"])]
+            return _precision_top1pct(r["recall_top1pct"], rows, fraud)
+        log["precision_top1pct"] = log.apply(prec, axis=1) if len(log) else []
+    top = ["recall_top1pct"] + (["precision_top1pct"] if sizes is not None else [])
 
-    def inputs(p):
-        d = json.loads(p)
-        return json.dumps({k: v for k, v in d.items() if k not in ("fold", "threshold", "_fit")},
-                          sort_keys=True)
-
-    cv = log[log["split"] == "cv"].assign(settings=lambda t: t["params"].map(inputs))
-    cv = (cv.groupby(["feature_set", "settings"])["pr_auc"].agg(["mean", "std", "count"])
-          .rename(columns={"mean": "cv_pr_auc", "std": "cv_std", "count": "folds"})
+    cv = log[log["split"] == "cv"]
+    cv = (cv.groupby(["feature_set", "settings"])
+          .agg(cv_pr_auc=("pr_auc", "mean"), cv_std=("pr_auc", "std"), cv_auroc=("auroc", "mean"),
+               **{f"cv_{m}": (m, "mean") for m in top}, folds=("fold", "nunique"))
           .reset_index().sort_values(["feature_set", "cv_pr_auc"], ascending=[True, False]))
-    val = log[log["split"] == "val"].assign(settings=lambda t: t["params"].map(inputs))
-    metrics = ["pr_auc", "auroc", "recall_top1pct"]
+    val = log[log["split"] == "val"]
+    metrics = ["pr_auc", "auroc"] + top + ["precision", "recall"]
     val = val.groupby(["feature_set", "settings"]).agg(
-        **{f"{m}_{s}": (m, s) for m in metrics for s in ("mean", "std")}, seeds=("seed", "nunique"))
+        **{f"{m}_{s}": (m, s) for m in metrics for s in ("mean", "std")},
+        threshold_mean=("threshold", "mean"), seeds=("seed", "nunique"))
     return cv.reset_index(drop=True), val.reset_index()

@@ -135,6 +135,8 @@ Each model has its own notebook: `04_logreg`, `05_random_forest`, `06_lightgbm`,
    stopped and rerun. Validation scores (and, with `SAVE_OOF`, the time-CV fold scores of the chosen settings) are
    saved to `results/preds/` (gitignored) for the comparison and a possible ensemble.
 
+Each model notebook reports, per feature set, PR-AUC (main metric), AUROC, recall and precision in the top 1% of
+scores, and precision and recall at the F1 threshold chosen on validation, plus known vs unknown customers.
 `10_model_comparison.ipynb` reads the log and shows every model × feature set (mean ± sd over seeds), what each
 feature group adds, and PR-AUC for **known vs unknown customers** (`uid` seen in the training data or not;
 `src/segments.py`) with 95% bootstrap intervals, on the validation block and on the time-CV fold scores (where
