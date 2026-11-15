@@ -9,8 +9,9 @@ EARLY_STOPPING = True   # src.experiment holds out rows for it in the G0-G3 runs
 # Row and column subsampling (80% each, a fresh row sample every tree) match src/models/xgb.py
 # and src/models/catboost.py, so the three boosting models differ only in their algorithms.
 # Added 2026-11-14 for the G0-G3 runs; the earlier F0-F2 runs used no subsampling.
+# Cap on trees raised from 1,500 to 3,000 on 2026-11-16, the same for all three boosting models.
 DEFAULTS = {
-    "n_estimators": 1500, "num_leaves": 63, "learning_rate": 0.05,
+    "n_estimators": 3000, "num_leaves": 63, "learning_rate": 0.05,
     "min_child_samples": 100, "scale_pos_weight": "balanced", "n_jobs": 6,
     "subsample": 0.8, "subsample_freq": 1, "colsample_bytree": 0.8,
 }

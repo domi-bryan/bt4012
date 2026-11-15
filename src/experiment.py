@@ -240,8 +240,8 @@ VAL_SEEDS = (0, 1, 2)
 # so LightGBM, XGBoost, CatBoost and the MLP never early-stop on the rows they are scored on.
 ES_FRACTION = 0.1
 # Early-stopping setup of the G0-G3 runs, logged as params["es_setup"] by the models that early-stop.
-#   1 (2026-11-14, not logged): validation and OOF models trained on the first 90% only.
-#   2 (2026-11-16): validation, OOF and final models find the stopping point on the last
+#   1 (2026-11-14, not logged): 1,500-tree cap; validation and OOF models trained on the first 90% only.
+#   2 (2026-11-16): 3,000-tree cap; validation, OOF and final models find the stopping point on the last
 #     10% and are then refit on the whole training part with it. Tuning (time CV) still early-stops on
 #     the last 10% of each fold without a refit, the same for every setting.
 # Rows of early-stopping models from another setup are left out of the summaries (`current_runs`).

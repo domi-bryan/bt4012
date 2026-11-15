@@ -136,7 +136,7 @@ Each model has its own notebook: `04_logreg`, `05_random_forest`, `06_lightgbm`,
    part for it, so no model is ever tuned or stopped on the rows it is scored on. In tuning that is the whole fit;
    validation (and the saved fold scores) then refit on the whole training part with the stopping point found
    (number of trees, or epochs for the MLP), so the scored model trains on every training row, as logistic
-   regression and random forest do. Search budgets: logistic
+   regression and random forest do. The boosting models allow up to 3,000 trees. Search budgets: logistic
    regression 11 settings (grid), random forest 12 (grid), MLP 16 (random), boosting models 20 each (random). By default (`TUNE_ON = "G3"`) it tunes once on G3 and
    validates those settings on every set; `TUNE_ON = None` tunes each set separately.
 3. Every fit appends a row to `results/log.csv`, and anything already logged is skipped, so a notebook can be

@@ -235,6 +235,7 @@ def test_refit_params_fix_the_stopping_point(transactions):
     rounds = catboost.refit_params(stopped)
     assert rounds == {"iterations": stopped.run_metadata["best_iteration"]} and rounds["iterations"] < 300
     assert catboost.fit(X, y, None, None, {"thread_count": 1, **rounds}).clf.tree_count_ == rounds["iterations"]
+    assert lgbm.DEFAULTS["n_estimators"] == catboost.DEFAULTS["iterations"] == 3000
 
 
 def test_older_early_stopping_runs_are_superseded(transactions, tmp_path):
