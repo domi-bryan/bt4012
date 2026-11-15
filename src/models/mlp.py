@@ -1,7 +1,7 @@
 """Role A: PyTorch MLP on `LinearPipeline` output (Step 10).
 
 Two ReLU hidden layers (hidden, hidden // 2) with dropout, Adam, mini-batches of 2,048 and
-BCEWithLogitsLoss(pos_weight = negatives / positives of the training rows). With validation rows,
+BCEWithLogitsLoss with `pos_weight` "balanced" (negatives / positives of the training rows) or 1 (unweighted). With validation rows,
 training stops after `patience` epochs without a better validation PR-AUC and the best epoch's
 weights are kept; without them it runs exactly `max_epochs` epochs (the refit in src.experiment).
 Runs on CPU so seeded runs are reproducible.
@@ -15,12 +15,13 @@ from torch import nn
 NAME = "mlp"
 EARLY_STOPPING = True   # src.experiment holds out rows for it in the G0-G3 runs
 DEFAULTS = {"hidden": 256, "dropout": 0.2, "lr": 1e-3, "batch_size": 2048,
-            "max_epochs": 40, "patience": 5, "layers": 2, "weight_decay": 0.0}
-# Random search: 16 of 32 combinations, adding depth (2 or 3 hidden layers) and weight decay
-# (widened 2026-11-14; F0-F2 runs used the 8-setting grid over hidden x dropout x lr).
+            "max_epochs": 40, "patience": 5, "layers": 2, "weight_decay": 0.0, "pos_weight": "balanced"}
+# Random search: 16 of 64 combinations, adding depth (2 or 3 hidden layers) and weight decay
+# (widened 2026-11-14; F0-F2 runs used the 8-setting grid over hidden x dropout x lr) and class
+# weighting (added 2026-11-16, the same choice the boosting models tune as scale_pos_weight).
 GRID = list(ParameterSampler({
     "hidden": [128, 256], "dropout": [0.1, 0.3], "lr": [3e-4, 1e-3],
-    "layers": [2, 3], "weight_decay": [0.0, 1e-5],
+    "layers": [2, 3], "weight_decay": [0.0, 1e-5], "pos_weight": [1.0, "balanced"],
 }, n_iter=16, random_state=0))
 PREDICT_BATCH = 65536
 
@@ -74,7 +75,7 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
     pos = float(y.sum())
     if pos == 0 or pos == len(y):
         raise ValueError("MLP training requires both classes")
-    pos_weight = (len(y) - pos) / pos
+    pos_weight = (len(y) - pos) / pos if p["pos_weight"] == "balanced" else float(p["pos_weight"])
 
     net = build_net(X.shape[1], p["hidden"], p["dropout"], p["layers"])
     opt = torch.optim.Adam(net.parameters(), lr=p["lr"], weight_decay=p["weight_decay"])

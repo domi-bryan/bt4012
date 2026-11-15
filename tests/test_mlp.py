@@ -105,3 +105,8 @@ def test_run_cell_logs_cv_and_three_seeds(transactions, tmp_path):
     run_cell(mlp, make, transactions, tr, va, "F0", grid, log_path=log, best_path=best_path)
     assert len(pd.read_csv(log)) == len(df)
 
+
+def test_class_weight_is_a_setting(matrices):
+    X, y, V, v = matrices
+    assert mlp.fit(X, y, V, v, {"hidden": 8, "max_epochs": 2, "pos_weight": 1.0}).run_metadata["pos_weight"] == 1.0
+    assert {str(g["pos_weight"]) for g in mlp.GRID} == {"1.0", "balanced"}
