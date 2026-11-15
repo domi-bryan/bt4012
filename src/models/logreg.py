@@ -65,3 +65,12 @@ if __name__ == "__main__":
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
     main(a.feature_set, a.seed, a.force)
+
+
+IMPORTANCE = "absolute coefficient (standardised inputs)"
+
+
+def feature_importance(model, columns):
+    """|coefficient| per input column; inputs are standardised, so sizes are comparable within the model."""
+    import pandas as pd
+    return pd.Series(np.abs(model.clf.coef_[0]), index=list(columns))

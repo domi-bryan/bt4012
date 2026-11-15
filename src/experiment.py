@@ -315,3 +315,40 @@ def run_summary(model_name, feature_sets, log_path=LOG_PATH, sizes=None):
         **{f"{m}_{s}": (m, s) for m in metrics for s in ("mean", "std")},
         threshold_mean=("threshold", "mean"), seeds=("seed", "nunique"))
     return cv.reset_index(drop=True), val.reset_index()
+
+
+MODELS_DIR = ROOT / "results" / "models"
+
+
+def fit_final(model, make_pipeline, df, train_idx, params, feature_set, seed=0, es_fraction=ES_FRACTION,
+              cache_dir=MODELS_DIR):
+    """Refit `params` on the training block exactly as `fit_validate` does (same rows, same early-stopping
+    hold-out, same seed), without logging. Returns (fitted model, fitted pipeline).
+
+    The pair is cached as results/models/<model>_<set>_seed<seed>.pkl (gitignored) with the settings, so
+    reruns, feature importance and the final test scoring reuse it instead of refitting.
+    """
+    import pickle
+    path = None if cache_dir is None else cache_dir / f"{model.NAME}_{feature_set}_seed{seed}.pkl"
+    key = json.dumps(params, sort_keys=True)
+    if path is not None and path.exists():
+        with open(path, "rb") as handle:
+            saved = pickle.load(handle)
+        if saved.get("params") == key and saved.get("es_fraction") == es_fraction:
+            return saved["model"], saved["pipeline"]
+    fit_idx, es_idx = (split_early_stopping(train_idx, es_fraction)
+                       if es_fraction and _uses_early_stopping(model) else (np.asarray(train_idx), None))
+    pipe = make_pipeline().fit(df.iloc[fit_idx])
+    X, y = _xy(pipe, df, fit_idx)
+    X_es, y_es = _xy(pipe, df, es_idx) if es_idx is not None else (None, None)
+    set_seeds(seed)
+    fitted = model.fit(X, y, X_es, y_es, params, seed=seed)
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(path, "wb") as handle:
+                pickle.dump({"model": fitted, "pipeline": pipe, "params": key, "es_fraction": es_fraction}, handle)
+        except Exception as exc:   # a model that can't be pickled is simply not cached
+            path.unlink(missing_ok=True)
+            print(f"not cached ({type(exc).__name__}: {exc})")
+    return fitted, pipe

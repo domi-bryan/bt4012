@@ -115,3 +115,12 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
 
 def predict_proba(model, X):
     return model.predict_proba(X)
+
+
+IMPORTANCE = "prediction values change"
+
+
+def feature_importance(model, columns):
+    """CatBoost's default importance: how much predictions change on average when a feature's split values change."""
+    return pd.Series(model.clf.get_feature_importance(), index=model.clf.feature_names_,
+                     dtype="float64").reindex(list(columns)).fillna(0.0)

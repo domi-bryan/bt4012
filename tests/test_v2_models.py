@@ -196,3 +196,41 @@ def test_early_stopping_rows_are_held_out_of_scored_rows(transactions, tmp_path,
         assert np.array_equal(fit_rows, transactions.index[part])             # no early stopping: all rows
     fit_meta = [json.loads(p)["_fit"] for p in pd.read_csv(tmp_path / "log.csv").query("model == 'lgbm'").params]
     assert all(m["early_stopping_rows"] > 0 for m in fit_meta)
+
+
+def test_fit_final_matches_validation_run_and_is_cached(transactions, tmp_path):
+    from sklearn.metrics import average_precision_score
+    tr, va, _ = holdout_indices(transactions)
+    cols = ["a", "b", "cat"]
+    make = lambda: data.TreePipeline("lgbm", columns=cols)
+    params = {"num_leaves": 7, "n_estimators": 30, "n_jobs": 1}
+    val = experiment.fit_validate(lgbm, make, transactions, tr, va, params, "S", log_path=tmp_path / "log.csv",
+                                  es_fraction=experiment.ES_FRACTION)
+    fitted, pipe = experiment.fit_final(lgbm, make, transactions, tr, params, "S", cache_dir=tmp_path)
+    X = pipe.transform(transactions.iloc[va])
+    assert average_precision_score(transactions.isFraud.iloc[va], fitted.predict_proba(X)) == pytest.approx(val["pr_auc"])
+    assert (tmp_path / "lgbm_S_seed0.pkl").exists()
+    cached, _ = experiment.fit_final(lgbm, make, transactions, tr, params, "S", cache_dir=tmp_path)
+    assert np.array_equal(cached.predict_proba(X), fitted.predict_proba(X))
+
+
+def test_importance_maps_pipeline_columns_and_ranks_the_signal(transactions):
+    from src import importance
+    from src.models import logreg
+    tr, va, _ = holdout_indices(transactions)
+    cols = ["a", "noise", "cat"]
+    pipe = data.LinearPipeline(columns=cols).fit(transactions.iloc[tr])
+    assert importance.column_blocks(pipe.columns_, cols) == {
+        "a": ["a", "a__missing"], "noise": ["noise"], "cat": ["cat==p", "cat==q", "cat==__nan__"]}
+    X, y = pipe.transform(transactions.iloc[tr]), transactions.isFraud.iloc[tr]
+    fitted = logreg.fit(X, y)
+    built_in = importance.intrinsic(logreg, fitted, list(X.columns), cols)
+    assert list(built_in.index) == cols and built_in.idxmax() == "a"
+    V, v = pipe.transform(transactions.iloc[va]), transactions.isFraud.iloc[va]
+    perm = importance.permutation(fitted, V, v, cols, n_rows=len(va), repeats=3, seed=1)
+    assert perm["pr_auc_drop"].idxmax() == "a" and perm["drop_sd"].notna().all()
+    # tree input keeps category dtypes when shuffled
+    tp = data.TreePipeline("lgbm", columns=cols).fit(transactions.iloc[tr])
+    T = tp.transform(transactions.iloc[va])
+    f2 = lgbm.fit(tp.transform(transactions.iloc[tr]), y, T, v, {"n_estimators": 30, "n_jobs": 1})
+    assert set(importance.permutation(f2, T, v, cols, n_rows=len(va)).index) == set(cols)

@@ -140,7 +140,12 @@ Each model has its own notebook: `04_logreg`, `05_random_forest`, `06_lightgbm`,
    saved to `results/preds/` (gitignored) for the comparison and a possible ensemble.
 
 Each model notebook reports, per feature set, PR-AUC (main metric), AUROC, recall and precision in the top 1% of
-scores, and precision and recall at the F1 threshold chosen on validation, plus known vs unknown customers.
+scores, and precision and recall at the F1 threshold chosen on validation, plus precision–recall curves, known vs
+unknown customers, and feature importance (section 6): permutation importance (drop in validation PR-AUC when a column
+is shuffled; comparable across models) and the model's built-in importance where it has one (gain for LightGBM and
+XGBoost, impurity for random forest, prediction values change for CatBoost, |coefficient| for logistic regression;
+none for the MLP). Importance tables are saved to `results/importance/` (committed) and the refitted models to
+`results/models/` (gitignored).
 `10_model_comparison.ipynb` reads the log and shows every model × feature set (mean ± sd over seeds), what each
 feature group adds, and PR-AUC for **known vs unknown customers** (`uid` seen in the training data or not;
 `src/segments.py`) with 95% bootstrap intervals, on the validation block and on the time-CV fold scores (where

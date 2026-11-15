@@ -14,3 +14,6 @@ reports/figures/*.png
 
 # Saved model predictions (large; rebuilt by the model notebooks)
 results/preds/
+
+# Fitted models cached by the model notebooks (large; rebuilt on demand)
+results/models/

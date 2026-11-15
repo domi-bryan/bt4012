@@ -66,3 +66,12 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
 
 def predict_proba(model, X):
     return model.predict_proba(X)
+
+
+IMPORTANCE = "total gain"
+
+
+def feature_importance(model, columns):
+    """Total gain of the splits on each input column."""
+    import pandas as pd
+    return pd.Series(model.clf.booster_.feature_importance("gain"), index=list(columns), dtype="float64")

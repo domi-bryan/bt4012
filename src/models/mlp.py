@@ -105,3 +105,10 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
 
 def predict_proba(model, X):
     return model.predict_proba(X)
+
+
+IMPORTANCE = None   # no built-in importance; use permutation importance (src/importance.py)
+
+
+def feature_importance(model, columns):
+    return None

@@ -30,3 +30,12 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
 
 def predict_proba(model, X):
     return model.predict_proba(X)
+
+
+IMPORTANCE = "mean impurity decrease"
+
+
+def feature_importance(model, columns):
+    """Mean decrease in Gini impurity per input column (scikit-learn's feature_importances_)."""
+    import pandas as pd
+    return pd.Series(model.clf.feature_importances_, index=list(columns))
