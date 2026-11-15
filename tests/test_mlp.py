@@ -69,10 +69,22 @@ def test_same_seed_same_scores(matrices):
     assert np.array_equal(a, b) and not np.array_equal(a, c)
 
 
-def test_requires_validation(matrices):
-    X, y, _, _ = matrices
+def test_validation_rows_come_in_pairs(matrices):
+    X, y, V, _ = matrices
     with pytest.raises(ValueError, match="X_val"):
-        mlp.fit(X, y, None, None, {})
+        mlp.fit(X, y, V, None, {})
+
+
+def test_without_validation_runs_exactly_max_epochs(matrices):
+    """The refit after early stopping: no validation rows, a fixed number of epochs, final weights kept."""
+    X, y, V, v = matrices
+    stopped = mlp.fit(X, y, V, v, {"hidden": 8, "max_epochs": 6}, seed=0)
+    rounds = mlp.refit_params(stopped)
+    assert rounds == {"max_epochs": stopped.run_metadata["best_epoch"]}
+    refit = mlp.fit(X, y, None, None, {"hidden": 8, **rounds}, seed=0)
+    assert refit.run_metadata["epochs_run"] == refit.run_metadata["best_epoch"] == rounds["max_epochs"]
+    assert refit.run_metadata["val_pr_auc"] == []
+    assert np.isfinite(mlp.predict_proba(refit, V)).all()
 
 
 def test_run_cell_logs_cv_and_three_seeds(transactions, tmp_path):
@@ -92,3 +104,9 @@ def test_run_cell_logs_cv_and_three_seeds(transactions, tmp_path):
     # rerunning resumes: no new rows
     run_cell(mlp, make, transactions, tr, va, "F0", grid, log_path=log, best_path=best_path)
     assert len(pd.read_csv(log)) == len(df)
+
+
+def test_class_weight_is_a_setting(matrices):
+    X, y, V, v = matrices
+    assert mlp.fit(X, y, V, v, {"hidden": 8, "max_epochs": 2, "pos_weight": 1.0}).run_metadata["pos_weight"] == 1.0
+    assert {str(g["pos_weight"]) for g in mlp.GRID} == {"1.0", "balanced"}

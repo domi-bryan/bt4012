@@ -10,8 +10,9 @@ EARLY_STOPPING = True   # src.experiment holds out rows for it in the G0-G3 runs
 # Row and column subsampling (80% each: Bernoulli row sampling, `rsm` for columns) match
 # src/models/lgbm.py and src/models/xgb.py. Added 2026-11-14 for the G0-G3 runs; the earlier
 # F0-F2 runs used CatBoost's default (MVS) row sampling and all columns.
+# Cap on trees raised from 1,500 to 3,000 on 2026-11-16, the same for all three boosting models.
 DEFAULTS = {
-    "iterations": 1500, "depth": 6, "learning_rate": 0.05,
+    "iterations": 3000, "depth": 6, "learning_rate": 0.05,
     "l2_leaf_reg": 3.0, "scale_pos_weight": "balanced",
     "thread_count": 6, "early_stopping_rounds": 50,
     "bootstrap_type": "Bernoulli", "subsample": 0.8, "rsm": 0.8,
@@ -111,6 +112,11 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
                   "early_stopping_rounds": patience}
     clf.fit(X, y, **kwargs)
     return Model(clf, p["scale_pos_weight"], one_hot_max_size)
+
+
+def refit_params(model):
+    """The stopping point found by early stopping, as settings for a refit without it."""
+    return {"iterations": model.run_metadata["best_iteration"]}
 
 
 def predict_proba(model, X):

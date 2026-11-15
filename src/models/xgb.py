@@ -13,8 +13,9 @@ from sklearn.model_selection import ParameterSampler
 
 NAME = "xgboost"
 EARLY_STOPPING = True   # src.experiment holds out rows for it in the G0-G3 runs
+# Cap on trees (raised from 1,500 on 2026-11-16: at learning rate 0.03 many fits hit 1,500 before early stopping).
 DEFAULTS = {
-    "n_estimators": 1500, "max_depth": 6, "learning_rate": 0.05, "min_child_weight": 1.0,
+    "n_estimators": 3000, "max_depth": 6, "learning_rate": 0.05, "min_child_weight": 1.0,
     # 80% of rows and columns per tree, the same as src/models/lgbm.py and catboost.py
     "subsample": 0.8, "colsample_bytree": 0.8, "reg_lambda": 1.0,
     "scale_pos_weight": "balanced", "n_jobs": 6,
@@ -70,6 +71,11 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
     kwargs = {"eval_set": [(X_val, np.asarray(y_val))], "verbose": False} if X_val is not None else {}
     clf.fit(X, y, **kwargs)
     return Model(clf, p["scale_pos_weight"])
+
+
+def refit_params(model):
+    """The stopping point found by early stopping, as settings for a refit without it."""
+    return {"n_estimators": model.run_metadata["best_iteration"]}
 
 
 def predict_proba(model, X):
