@@ -142,7 +142,8 @@ Each model has its own notebook: `04_logreg`, `05_random_forest`, `06_lightgbm`,
 
 Each model notebook reports, per feature set, PR-AUC (main metric), AUROC, recall and precision in the top 1% of
 scores, and precision and recall at the F1 threshold chosen on validation, plus precision–recall curves, known vs
-unknown customers, and feature importance (section 6): permutation importance (drop in validation PR-AUC when a column
+unknown customers, how each tuned setting affects time-CV PR-AUC (5.5, for RQ4; read from the tuning runs in the
+log, no extra training), and feature importance (section 6): permutation importance (drop in validation PR-AUC when a column
 is shuffled; comparable across models) and the model's built-in importance where it has one (gain for LightGBM and
 XGBoost, impurity for random forest, prediction values change for CatBoost, |coefficient| for logistic regression;
 none for the MLP). Importance tables are saved to `results/importance/` (committed) and the refitted models to

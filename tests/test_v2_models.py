@@ -234,3 +234,41 @@ def test_importance_maps_pipeline_columns_and_ranks_the_signal(transactions):
     T = tp.transform(transactions.iloc[va])
     f2 = lgbm.fit(tp.transform(transactions.iloc[tr]), y, T, v, {"n_estimators": 30, "n_jobs": 1})
     assert set(importance.permutation(f2, T, v, cols, n_rows=len(va)).index) == set(cols)
+
+
+def test_setting_sensitivity_from_the_tuning_log(tmp_path):
+    rows = []
+    for c, score in [(0.01, 0.30), (0.1, 0.40), (1.0, 0.35)]:
+        for leaf, bump in [(5, 0.02), (20, 0.0)]:
+            for fold in (1, 2):
+                rows.append({"model": "m", "feature_set": "G3", "split": "cv", "seed": 0,
+                             "params": json.dumps({"C": c, "leaf": leaf, "fold": fold}),
+                             "pr_auc": score + bump + 0.01 * fold})
+    rows.append({"model": "m", "feature_set": "G3", "split": "cv", "seed": 0,       # incomplete: 1 fold only
+                 "params": json.dumps({"C": 10.0, "leaf": 5, "fold": 1}), "pr_auc": 0.9})
+    pd.DataFrame(rows).to_csv(tmp_path / "log.csv", index=False)
+    s = experiment.setting_sensitivity("m", "G3", tmp_path / "log.csv")
+    c = s[s.setting == "C"].set_index("value")
+    assert list(c.index) == [0.01, 0.1, 1.0]                       # numeric order; the 1-fold run is ignored
+    assert c.loc[0.1, "mean"] == pytest.approx(0.425)              # mean over leaf {5, 20}, folds averaged
+    assert c.loc[0.1, "best"] == pytest.approx(0.435) and c.loc[0.1, "combinations"] == 2
+    leaf = s[s.setting == "leaf"].set_index("value")
+    assert leaf.loc[5, "mean"] - leaf.loc[20, "mean"] == pytest.approx(0.02)
+
+
+def test_setting_sensitivity_keeps_none_and_integers(tmp_path):
+    rows = [{"model": "rf", "feature_set": "G3", "split": "cv", "seed": 0,
+             "params": json.dumps({"max_depth": d, "leaf": 5, "fold": f}), "pr_auc": score}
+            for d, score in [(12, 0.3), (None, 0.4)] for f in (1, 2)]
+    pd.DataFrame(rows).to_csv(tmp_path / "log.csv", index=False)
+    s = experiment.setting_sensitivity("rf", "G3", tmp_path / "log.csv")
+    assert list(s["value"]) == [12, "none"] and isinstance(s["value"][0], int)
+
+
+def test_setting_sensitivity_value_column_keeps_types(tmp_path):
+    rows = [{"model": "m", "feature_set": "G3", "split": "cv", "seed": 0,
+             "params": json.dumps({"leaves": lv, "lr": lr, "fold": 1}), "pr_auc": 0.1 * lv / 15 + lr}
+            for lv in (15, 31) for lr in (0.03, 0.1)]
+    pd.DataFrame(rows).to_csv(tmp_path / "log.csv", index=False)
+    s = experiment.setting_sensitivity("m", "G3", tmp_path / "log.csv")
+    assert all(isinstance(v, (int, np.integer)) for v in s[s.setting == "leaves"]["value"])   # not 15.0

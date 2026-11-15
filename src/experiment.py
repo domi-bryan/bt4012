@@ -352,3 +352,43 @@ def fit_final(model, make_pipeline, df, train_idx, params, feature_set, seed=0, 
             path.unlink(missing_ok=True)
             print(f"not cached ({type(exc).__name__}: {exc})")
     return fitted, pipe
+
+
+def setting_sensitivity(model_name, feature_set, log_path=LOG_PATH, folds=None):
+    """RQ4 from the tuning runs already in the log: for each tuned setting and each value it took,
+    the mean, best and worst time-CV PR-AUC over the settings tried with that value.
+
+    Each tried combination is first averaged over its folds (only combinations with all `folds`
+    folds count; default: the most folds any combination has). With a full grid every value is
+    paired with the same mix of other settings; with random search the mix differs by value, so the
+    marginal means are indicative rather than a controlled one-at-a-time sweep.
+    Returns one row per (setting, value): setting, value, mean, best, worst, combinations.
+    """
+    log = pd.read_csv(log_path)
+    cv = log[(log["model"] == model_name) & (log["feature_set"] == feature_set) & (log["split"] == "cv")]
+    if cv.empty:
+        return pd.DataFrame(columns=["setting", "value", "mean", "best", "worst", "combinations"])
+    params = cv["params"].map(json.loads)
+    cv = cv.assign(settings=params.map(lambda d: json.dumps(
+        {k: v for k, v in d.items() if k not in ("fold", "threshold", "_fit")}, sort_keys=True)))
+    per = cv.groupby("settings")["pr_auc"].agg(["mean", "count"])
+    per = per[per["count"] == (folds or per["count"].max())]
+    # dtype=object keeps None (unlimited depth) and integers as they were logged
+    table = pd.DataFrame([json.loads(s) for s in per.index], index=per.index, dtype=object)
+    table["score"] = per["mean"].astype("float64")
+    rows = []
+    for setting in [c for c in table.columns if c != "score"]:
+        values = table[setting].map(lambda v: "none" if v is None else v)
+        if values.nunique() < 2:
+            continue
+        for value, part in table.groupby(values.astype(str), sort=False)["score"]:
+            value = values[part.index[0]]
+            rows.append({"setting": setting, "value": value, "mean": part.mean(), "best": part.max(),
+                         "worst": part.min(), "combinations": len(part)})
+    out = pd.DataFrame(rows, columns=["setting", "value", "mean", "best", "worst", "combinations"])
+    out["value"] = pd.Series([r["value"] for r in rows], dtype=object)   # keep 15 as 15, not 15.0
+
+    def order(v):   # numbers in numeric order, then text values (e.g. "balanced", "sqrt", "none")
+        return (0, float(v), "") if isinstance(v, (int, float)) and not isinstance(v, bool) else (1, 0.0, str(v))
+    return (out.assign(_k=out["value"].map(order)).sort_values(["setting", "_k"])
+            .drop(columns="_k").reset_index(drop=True))

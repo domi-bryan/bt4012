@@ -343,3 +343,8 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
 - Regularisation by model: logistic regression L2 via C (tuned); random forest depth, leaf size and `max_features` (tuned) plus bagging; MLP dropout and weight decay (tuned) plus early stopping; the boosting models tree size, minimum leaf size or child weight, learning rate and L2 (tuned), fixed 80% row and column subsampling, and early stopping on held-out rows.
 - Checks: the requested `reg_lambda` reaches LightGBM and XGBoost; full suite 114 passed.
 
+## RQ4: setting sensitivity from the tuning runs (2026-11-14)
+- `experiment.setting_sensitivity` reads a model's time-CV rows from the log, averages each tried combination over its folds (only complete combinations), and for each tuned setting and value gives the mean, best and worst PR-AUC and the number of combinations. Each model notebook shows it as section 5.5 (table plus one panel per setting, chosen value starred), with no extra training.
+- Caveat stated in each notebook: LR and RF use full grids, so values are compared on equal terms; LightGBM, XGBoost, CatBoost and the MLP use random search, so each value is paired with a different mix of other settings and the means are indicative rather than a controlled one-at-a-time sweep (as `Context.md`'s RQ4 plan describes). The tree count and epochs are set by early stopping, not tuned.
+- Checks: 3 new tests (fold averaging and incomplete combinations; unlimited depth kept as "none"; integer values kept as integers); full suite 117 passed. Test copies of the six model notebooks ran end to end with multi-setting grids on a data sample.
+
