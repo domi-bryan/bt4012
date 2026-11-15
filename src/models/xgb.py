@@ -19,10 +19,13 @@ DEFAULTS = {
     "subsample": 0.8, "colsample_bytree": 0.8, "reg_lambda": 1.0,
     "scale_pos_weight": "balanced", "n_jobs": 6,
 }
+# reg_lambda (L2 on leaf weights) is tuned over the same values as LightGBM's reg_lambda and
+# CatBoost's l2_leaf_reg.
 GRID = list(ParameterSampler({
     "max_depth": [4, 6, 8, 10],
     "learning_rate": [0.03, 0.1],
     "min_child_weight": [1.0, 5.0, 20.0],
+    "reg_lambda": [1.0, 3.0, 10.0],
     "scale_pos_weight": [1.0, "balanced"],
 }, n_iter=20, random_state=0))
 PATIENCE = 50

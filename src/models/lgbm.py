@@ -14,10 +14,13 @@ DEFAULTS = {
     "min_child_samples": 100, "scale_pos_weight": "balanced", "n_jobs": 6,
     "subsample": 0.8, "subsample_freq": 1, "colsample_bytree": 0.8,
 }
+# L2 on leaf weights (reg_lambda) is tuned over the same values as XGBoost's reg_lambda and CatBoost's
+# l2_leaf_reg (added 2026-11-14; F0-F2 runs used LightGBM's default of 0).
 GRID = list(ParameterSampler({
     "num_leaves": [31, 63, 127],
     "learning_rate": [0.03, 0.1],
     "min_child_samples": [20, 100, 300],
+    "reg_lambda": [1.0, 3.0, 10.0],
     "scale_pos_weight": [1.0, "balanced"],
 }, n_iter=20, random_state=0))
 

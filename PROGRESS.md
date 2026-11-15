@@ -338,3 +338,8 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
 - `10_model_comparison` adds precision–recall curves of all models on the largest feature set and a cross-model table of permutation-importance ranks and totals by feature group.
 - Checks: 2 new tests (refit matches the logged validation run and is cached; pipeline columns map back to raw columns, the informative column ranks first, category dtypes survive shuffling); full suite 114 passed. The refit-matches-validation check passed for all six models on synthetic data, and test copies of all seven notebooks ran end to end on a sample of the real data with scratch paths.
 
+## Same L2 regularisation search for the three boosting models (2026-11-14)
+- LightGBM and XGBoost now tune `reg_lambda` (L2 on the leaf weights) over {1, 3, 10}, the values CatBoost already used for `l2_leaf_reg`. Before, LightGBM used none (default 0) and XGBoost a fixed 1. Each grid is still a seeded random sample of 20 combinations (LightGBM now from 108, XGBoost from 144); each L2 value appears 5–8 times in each.
+- Regularisation by model: logistic regression L2 via C (tuned); random forest depth, leaf size and `max_features` (tuned) plus bagging; MLP dropout and weight decay (tuned) plus early stopping; the boosting models tree size, minimum leaf size or child weight, learning rate and L2 (tuned), fixed 80% row and column subsampling, and early stopping on held-out rows.
+- Checks: the requested `reg_lambda` reaches LightGBM and XGBoost; full suite 114 passed.
+
