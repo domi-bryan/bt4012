@@ -136,7 +136,11 @@ Each model has its own notebook: `04_logreg`, `05_random_forest`, `06_lightgbm`,
    saved to `results/preds/` (gitignored) for the comparison and a possible ensemble.
 
 `10_model_comparison.ipynb` reads the log and shows every model × feature set (mean ± sd over seeds), what each
-feature group adds, and returning vs new customers. Run the model notebooks in Jupyter or with the `nbconvert`
+feature group adds, and PR-AUC for **known vs unknown customers** (`uid` seen in the training data or not;
+`src/segments.py`) with 95% bootstrap intervals, on the validation block and on the time-CV fold scores (where
+"known" means seen in that fold's training months). The split only uses information available when a transaction
+arrives, so it can also be used to weight models in an ensemble; choose any weights on the fold scores and check
+them on validation. Run the model notebooks in Jupyter or with the `nbconvert`
 command above (use a long timeout, e.g. `--ExecutePreprocessor.timeout=-1`, as full tuning can take hours).
 
 On macOS, XGBoost, PyTorch and LightGBM each ship their own OpenMP library and can crash when combined in one

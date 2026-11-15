@@ -128,3 +128,31 @@ def test_tune_and_validate_resumes_and_saves_scores(transactions, tmp_path):
     cv, val = experiment.run_summary("lgbm", list(sets), log)
     assert set(val.feature_set) == set(sets) and (val.seeds == 2).all()
     assert cv.folds.eq(folds).all()
+
+
+def test_known_uid_and_fold_references(transactions):
+    from src import segments
+    tr, va, _ = holdout_indices(transactions)
+    known = segments.known_uid(transactions["uid"].iloc[va], set(transactions["uid"].iloc[tr]))
+    assert known.dtype == bool and len(known) == len(va)
+    assert list(segments.segment_labels([True, False])) == ["known", "unknown"]
+    ref = segments.fold_reference_uids(transactions, tr)
+    from src.split import time_cv_folds
+    for k, (a, _) in enumerate(time_cv_folds(transactions, tr), start=1):
+        assert ref[k] == set(transactions["uid"].iloc[a])       # only that fold's training months
+    assert all(ref[k] <= ref[k + 1] for k in range(1, len(ref)))
+
+
+def test_segment_pr_auc_with_bootstrap():
+    from src import segments
+    rng = np.random.default_rng(0)
+    y = (rng.random(4000) < 0.1).astype(int)
+    scores = [y * 0.5 + rng.random(4000), y * 0.4 + rng.random(4000)]
+    known = rng.random(4000) < 0.5
+    t = segments.segment_pr_auc(y, scores, known, n_boot=50, seed=1)
+    assert list(t["segment"]) == ["known", "unknown"]
+    assert t["rows"].sum() == 4000 and t["fraud"].sum() == y.sum()
+    assert ((t["low"] <= t["pr_auc"]) & (t["pr_auc"] <= t["high"])).all()
+    assert t.equals(segments.segment_pr_auc(y, scores, known, n_boot=50, seed=1))   # reproducible
+    no_boot = segments.segment_pr_auc(y, scores[0], known, n_boot=0)
+    assert no_boot["low"].isna().all() and no_boot["pr_auc"].notna().all()
