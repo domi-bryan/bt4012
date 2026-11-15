@@ -12,6 +12,7 @@ from sklearn.metrics import average_precision_score
 from sklearn.model_selection import ParameterSampler
 
 NAME = "xgboost"
+EARLY_STOPPING = True   # src.experiment holds out rows for it in the G0-G3 runs
 DEFAULTS = {
     "n_estimators": 1500, "max_depth": 6, "learning_rate": 0.05, "min_child_weight": 1.0,
     # 80% of rows and columns per tree, the same as src/models/lgbm.py and catboost.py

@@ -28,7 +28,8 @@ def predict_proba(model, X):
     return model.predict_proba(X)
 
 
-GRID = [{"C": c} for c in (0.01, 0.1, 1, 10)]
+# 11 values of C from 0.001 to 100 in half-decade steps (widened 2026-11-14; F0-F2 runs used 0.01-10)
+GRID = [{"C": c} for c in (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100)]
 
 
 def main(feature_set="F0", seed=0, force=False):

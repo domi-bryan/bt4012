@@ -6,6 +6,7 @@ from sklearn.metrics import average_precision_score
 from sklearn.model_selection import ParameterSampler
 
 NAME = "catboost"
+EARLY_STOPPING = True   # src.experiment holds out rows for it in the G0-G3 runs
 # Row and column subsampling (80% each: Bernoulli row sampling, `rsm` for columns) match
 # src/models/lgbm.py and src/models/xgb.py. Added 2026-11-14 for the G0-G3 runs; the earlier
 # F0-F2 runs used CatBoost's default (MVS) row sampling and all columns.

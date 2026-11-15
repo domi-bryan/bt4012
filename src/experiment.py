@@ -31,12 +31,45 @@ def _xy(pipe, df, idx):
     return pipe.transform(part), part["isFraud"].to_numpy()
 
 
-def _fit_score(model, X, y, X_val, y_val, params, seed):
+def _fit_score(model, X, y, X_val, y_val, params, seed, X_score=None):
+    """Fit (X_val/y_val drive early stopping, if the model has any) and score X_score (default X_val)."""
     set_seeds(seed)
     t0 = time.time()
     fitted = model.fit(X, y, X_val, y_val, params, seed=seed)
-    score = fitted.predict_proba(X_val)
+    score = fitted.predict_proba(X_val if X_score is None else X_score)
     return fitted, score, time.time() - t0
+
+
+def _uses_early_stopping(model):
+    return bool(getattr(model, "EARLY_STOPPING", False))
+
+
+def split_early_stopping(idx, fraction):
+    """(fit rows, early-stopping rows): the last `fraction` of `idx` in time order goes to early stopping."""
+    idx = np.asarray(idx)
+    n = max(1, int(round(len(idx) * fraction)))
+    return idx[:-n], idx[-n:]
+
+
+def _prepare(model, make_pipeline, df, train_part, score_idx, es_fraction):
+    """Fit the pipeline and build the matrices for one fit.
+
+    With `es_fraction` and a model that early-stops, the last `es_fraction` of the training part
+    (by time) is held out for early stopping, so the scored rows never influence training.
+    Without it, early stopping (if any) watches the scored rows, as in the F0-F2 runs.
+    Returns (pipe, X, y, X_es, y_es, X_score, y_score, early_stopping_rows).
+    """
+    if es_fraction and _uses_early_stopping(model):
+        fit_idx, es_idx = split_early_stopping(train_part, es_fraction)
+    else:
+        fit_idx, es_idx = train_part, None
+    pipe = make_pipeline().fit(df.iloc[fit_idx])
+    X, y = _xy(pipe, df, fit_idx)
+    X_s, y_s = _xy(pipe, df, score_idx)
+    if es_idx is None:
+        return pipe, X, y, X_s, y_s, X_s, y_s, 0
+    X_es, y_es = _xy(pipe, df, es_idx)
+    return pipe, X, y, X_es, y_es, X_s, y_s, len(es_idx)
 
 
 def logged_run(model_name, feature_set, split, seed, params, log_path=LOG_PATH):
@@ -63,10 +96,11 @@ def logged_run(model_name, feature_set, split, seed, params, log_path=LOG_PATH):
 
 
 def time_cv(model, make_pipeline, df, train_idx, grid, feature_set, seed=0, log_path=LOG_PATH,
-            resume=False):
+            resume=False, es_fraction=None):
     """Score every params dict in `grid` on every time fold; log one cv row per (params, fold).
 
     Returns a DataFrame with one row per (params, fold). runtime_s covers model fit and predict.
+    `es_fraction`: see `_prepare` (None keeps the F0-F2 behaviour).
     """
     rows = []
     for k, (a, b) in enumerate(time_cv_folds(df, train_idx), start=1):
@@ -78,15 +112,15 @@ def time_cv(model, make_pipeline, df, train_idx, grid, feature_set, seed=0, log_
                 rows.append({**old, "fold": k, "params": params})
                 continue
             if not prepared:
-                pipe = make_pipeline().fit(df.iloc[a])
-                Xa, ya = _xy(pipe, df, a)
-                Xb, yb = _xy(pipe, df, b)
+                pipe, Xa, ya, Xe, ye, Xb, yb, n_es = _prepare(model, make_pipeline, df, a, b, es_fraction)
                 prepared = True
-            fitted, score, runtime = _fit_score(model, Xa, ya, Xb, yb, params, seed)
+            fitted, score, runtime = _fit_score(model, Xa, ya, Xe, ye, params, seed, X_score=Xb)
             metrics = evaluate(yb, score)
             logged_params = {**params, "fold": k}
             if hasattr(fitted, "run_metadata"):
-                logged_params["_fit"] = fitted.run_metadata
+                logged_params["_fit"] = dict(fitted.run_metadata)
+            if n_es:
+                logged_params.setdefault("_fit", {})["early_stopping_rows"] = n_es
             log_run(log_path, model=model.NAME, feature_set=feature_set, cv_scheme="time",
                     split="cv", seed=seed, params=logged_params,
                     runtime_s=round(runtime, 2), **metrics)
@@ -94,7 +128,7 @@ def time_cv(model, make_pipeline, df, train_idx, grid, feature_set, seed=0, log_
             print(f"fold {k} {params} pr_auc={metrics['pr_auc']:.4f} ({runtime:.0f}s)", flush=True)
             del fitted
         if prepared:
-            del Xa, Xb, pipe
+            del Xa, Xb, Xe, pipe
     return pd.DataFrame(rows)
 
 
@@ -106,20 +140,23 @@ def best_params(cv_rows):
 
 
 def fit_validate(model, make_pipeline, df, train_idx, val_idx, params, feature_set, seed=0,
-                 log_path=LOG_PATH):
+                 log_path=LOG_PATH, es_fraction=None):
     """Refit on the whole train block, score validation, pick the F1 threshold there, log one val row.
 
-    The threshold is stored in params so final test scoring can reuse it.
+    The threshold is stored in params so final test scoring can reuse it. With `es_fraction`, an
+    early-stopping model trains on the train block minus its last `es_fraction` (by time), which
+    is used for early stopping instead of the validation block.
     """
-    pipe = make_pipeline().fit(df.iloc[train_idx])
-    X, y = _xy(pipe, df, train_idx)
-    X_val, y_val = _xy(pipe, df, val_idx)
-    fitted, score, runtime = _fit_score(model, X, y, X_val, y_val, params, seed)
+    pipe, X, y, X_es, y_es, X_val, y_val, n_es = _prepare(model, make_pipeline, df, train_idx, val_idx,
+                                                          es_fraction)
+    fitted, score, runtime = _fit_score(model, X, y, X_es, y_es, params, seed, X_score=X_val)
     threshold = pick_threshold(y_val, score)
     metrics = evaluate(y_val, score, threshold)
     logged_params = {**params, "threshold": threshold}
     if hasattr(fitted, "run_metadata"):
-        logged_params["_fit"] = fitted.run_metadata
+        logged_params["_fit"] = dict(fitted.run_metadata)
+    if n_es:
+        logged_params.setdefault("_fit", {})["early_stopping_rows"] = n_es
     log_run(log_path, model=model.NAME, feature_set=feature_set, cv_scheme="holdout",
             split="val", seed=seed, params=logged_params,
             runtime_s=round(runtime, 2), **metrics)
@@ -143,6 +180,9 @@ from src.data import ROOT  # noqa: E402
 
 PREDS_DIR = ROOT / "results" / "preds"
 VAL_SEEDS = (0, 1, 2)
+# Share of each training part (the last rows by time) held out for early stopping in the G0-G3 runs,
+# so LightGBM, XGBoost, CatBoost and the MLP never early-stop on the rows they are scored on.
+ES_FRACTION = 0.1
 
 
 def save_predictions(path, df, idx, score, **meta):
@@ -158,7 +198,7 @@ def save_predictions(path, df, idx, score, **meta):
 
 
 def oof_predictions(model, make_pipeline, df, train_idx, params, feature_set, seed=0,
-                    preds_dir=PREDS_DIR):
+                    preds_dir=PREDS_DIR, es_fraction=ES_FRACTION):
     """Refit `params` on each time-CV fold and save the fold-validation scores (not logged).
 
     Covers the rows of folds 1-4 (days 31 to 141). Used to train a stacking model later.
@@ -168,10 +208,8 @@ def oof_predictions(model, make_pipeline, df, train_idx, params, feature_set, se
         return path
     parts = []
     for k, (a, b) in enumerate(time_cv_folds(df, train_idx), start=1):
-        pipe = make_pipeline().fit(df.iloc[a])
-        Xa, ya = _xy(pipe, df, a)
-        Xb, yb = _xy(pipe, df, b)
-        _, score, _ = _fit_score(model, Xa, ya, Xb, yb, params, seed)
+        _, Xa, ya, Xe, ye, Xb, yb, _ = _prepare(model, make_pipeline, df, a, b, es_fraction)
+        _, score, _ = _fit_score(model, Xa, ya, Xe, ye, params, seed, X_score=Xb)
         parts.append(pd.DataFrame({"TransactionID": df["TransactionID"].iloc[b].to_numpy(),
                                    "isFraud": yb, "score": score, "fold": k}))
     out = pd.concat(parts, ignore_index=True)
@@ -183,13 +221,16 @@ def oof_predictions(model, make_pipeline, df, train_idx, params, feature_set, se
 
 def tune_and_validate(model, make_pipeline, df, train_idx, val_idx, feature_sets, grid,
                       tune_on=None, seeds=VAL_SEEDS, log_path=LOG_PATH, preds_dir=PREDS_DIR,
-                      save_oof=False):
+                      save_oof=False, es_fraction=ES_FRACTION):
     """Tune with time CV (seed 0), then validate the chosen settings with each seed.
 
     `feature_sets` maps a set name (e.g. "G3") to its column list; `make_pipeline(columns)`
     returns an unfitted pipeline. With `tune_on=None` every set is tuned separately; with a
     set name (e.g. "G3"), tuning runs on that set only and its best settings are validated on
     every set, so the sets are compared with the model settings held fixed.
+
+    Models that early-stop (LightGBM, XGBoost, CatBoost, MLP) hold out the last `es_fraction` of
+    each training part for it, so no model ever sees the rows it is scored on.
 
     Everything already in the log is skipped, so a notebook can be stopped and rerun.
     Validation scores are saved to `preds_dir`; with `save_oof` the time-CV fold scores of
@@ -202,7 +243,7 @@ def tune_and_validate(model, make_pipeline, df, train_idx, val_idx, feature_sets
         cols = feature_sets[name]
         print(f"\n{model.NAME}/{name}: tuning {len(grid)} settings with time CV (seed 0)", flush=True)
         cv = time_cv(model, lambda cols=cols: make_pipeline(cols), df, train_idx, grid, name,
-                     seed=0, log_path=log_path, resume=True)
+                     seed=0, log_path=log_path, resume=True, es_fraction=es_fraction)
         tuned[name] = best_params(cv)
         print(f"{model.NAME}/{name}: best {tuned[name]}", flush=True)
     chosen = {name: tuned[tune_on] if tune_on else tuned[name] for name in feature_sets}
@@ -216,14 +257,15 @@ def tune_and_validate(model, make_pipeline, df, train_idx, val_idx, feature_sets
                 print(f"{model.NAME}/{name} seed {seed}: validation already logged{note}", flush=True)
                 continue
             val = fit_validate(model, build, df, train_idx, val_idx, params, name, seed=seed,
-                               log_path=log_path)
+                               log_path=log_path, es_fraction=es_fraction)
             save_predictions(path, df, val_idx, val["score"], seed=seed,
                              params=json.dumps(params, sort_keys=True))
             print(f"{model.NAME}/{name} seed {seed}: val pr_auc={val['pr_auc']:.4f} "
                   f"auroc={val['auroc']:.4f} ({val['runtime_s']:.0f}s)", flush=True)
             del val
         if save_oof:
-            oof_predictions(model, build, df, train_idx, params, name, seed=0, preds_dir=preds_dir)
+            oof_predictions(model, build, df, train_idx, params, name, seed=0, preds_dir=preds_dir,
+                            es_fraction=es_fraction)
     return chosen
 
 

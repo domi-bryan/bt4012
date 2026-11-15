@@ -3,9 +3,11 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 
 NAME = "rf"
-DEFAULTS = {"n_estimators": 300, "max_depth": 24, "min_samples_leaf": 5, "n_jobs": 6}
-GRID = [{"max_depth": depth, "min_samples_leaf": leaf}
-        for depth in (12, 24) for leaf in (5, 20)]
+DEFAULTS = {"n_estimators": 300, "max_depth": 24, "min_samples_leaf": 5, "max_features": "sqrt", "n_jobs": 6}
+# 12 settings: depth x minimum leaf size x share of columns tried per split (widened 2026-11-14;
+# F0-F2 runs used depth {12, 24} x leaf {5, 20} with sqrt columns). None = unlimited depth.
+GRID = [{"max_depth": depth, "min_samples_leaf": leaf, "max_features": mf}
+        for depth in (12, 24, None) for leaf in (5, 20) for mf in ("sqrt", 0.3)]
 
 
 class Model:

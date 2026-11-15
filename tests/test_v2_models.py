@@ -156,3 +156,43 @@ def test_segment_pr_auc_with_bootstrap():
     assert t.equals(segments.segment_pr_auc(y, scores, known, n_boot=50, seed=1))   # reproducible
     no_boot = segments.segment_pr_auc(y, scores[0], known, n_boot=0)
     assert no_boot["low"].isna().all() and no_boot["pr_auc"].notna().all()
+
+
+def test_early_stopping_rows_are_held_out_of_scored_rows(transactions, tmp_path, monkeypatch):
+    """G0-G3 runs: early-stopping models stop on the last 10% of their training part, never on scored rows."""
+    from src.models import logreg
+    from src.split import time_cv_folds
+    tr, va, _ = holdout_indices(transactions)
+    seen = []
+
+    def spy(module):
+        original = module.fit
+        def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
+            seen.append((module.NAME, X.index.to_numpy(), None if X_val is None else X_val.index.to_numpy()))
+            return original(X, y, X_val, y_val, params, seed)
+        monkeypatch.setattr(module, "fit", fit)
+
+    spy(lgbm)
+    spy(logreg)
+    sets = {"S": ["a", "b", "cat"]}
+    tree = lambda cols: data.TreePipeline("lgbm", columns=cols)
+    linear = lambda cols: data.LinearPipeline(columns=cols)
+    experiment.tune_and_validate(lgbm, tree, transactions, tr, va, sets,
+                                 [{"num_leaves": 7, "n_estimators": 20, "n_jobs": 1}], seeds=(0,),
+                                 log_path=tmp_path / "log.csv", preds_dir=tmp_path / "p")
+    experiment.tune_and_validate(logreg, linear, transactions, tr, va, sets, [{"C": 1.0}], seeds=(0,),
+                                 log_path=tmp_path / "log.csv", preds_dir=tmp_path / "p")
+    parts = [a for a, _ in time_cv_folds(transactions, tr)] + [tr]
+    scored = [b for _, b in time_cv_folds(transactions, tr)] + [va]
+    lg = [s for s in seen if s[0] == "lgbm"]
+    lr = [s for s in seen if s[0] == "logreg"]
+    assert len(lg) == len(lr) == len(parts)
+    for (_, fit_rows, es_rows), part, score in zip(lg, parts, scored):
+        fit_pos, es_pos = experiment.split_early_stopping(part, experiment.ES_FRACTION)
+        assert np.array_equal(fit_rows, transactions.index[fit_pos])          # first 90% of the part
+        assert np.array_equal(es_rows, transactions.index[es_pos])            # last 10%, by time
+        assert not set(es_rows) & set(transactions.index[score])              # never the scored rows
+    for (_, fit_rows, _), part in zip(lr, parts):
+        assert np.array_equal(fit_rows, transactions.index[part])             # no early stopping: all rows
+    fit_meta = [json.loads(p)["_fit"] for p in pd.read_csv(tmp_path / "log.csv").query("model == 'lgbm'").params]
+    assert all(m["early_stopping_rows"] > 0 for m in fit_meta)

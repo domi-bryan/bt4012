@@ -5,6 +5,7 @@ from sklearn.metrics import average_precision_score
 from sklearn.model_selection import ParameterSampler
 
 NAME = "lgbm"
+EARLY_STOPPING = True   # src.experiment holds out rows for it in the G0-G3 runs
 # Row and column subsampling (80% each, a fresh row sample every tree) match src/models/xgb.py
 # and src/models/catboost.py, so the three boosting models differ only in their algorithms.
 # Added 2026-11-14 for the G0-G3 runs; the earlier F0-F2 runs used no subsampling.
