@@ -1,6 +1,6 @@
 # BT4012 Group 11: Fraud detection on IEEE-CIS (Vesta)
 
-Benchmark of fraud detection models (logistic regression, random forest, LightGBM, MLP) on the IEEE-CIS Fraud Detection training data. Design decisions are in `Context.md`, the build order is in `BUILD_STEPS.md`, and finished work is logged in `PROGRESS.md`.
+Benchmark of fraud detection models (logistic regression, random forest, LightGBM, MLP and CatBoost; XGBoost is being added) on the IEEE-CIS Fraud Detection training data. Design decisions are in `Context.md`, the build order is in `BUILD_STEPS.md`, and finished work is logged in `PROGRESS.md`.
 
 ## 1. Set up the environment
 
@@ -190,7 +190,33 @@ since `results/step10_manifest.json` was written. Per-epoch loss and validation 
 stored in each log row's `params._fit`; `notebooks/04_mlp.ipynb` reads them and saves
 `reports/figures/mlp_training_curves.png`.
 
-## 10. Validation grid summary (Step 11)
+## 10. CatBoost
+
+```bash
+.venv/bin/python -u -m src.train_catboost --mode tune         # time-CV tuning on F0, F1, F2, then validation seeds 0, 1, 2
+.venv/bin/python -u -m src.train_catboost --mode sensitivity  # one-parameter sweeps on F2
+.venv/bin/python -u -m src.train_catboost --mode report       # rebuilds reports/catboost_sensitivity_F2.{md,csv} and plots
+```
+
+CatBoost uses the same splits, time-CV folds, features and logging as the other tree models
+(`src/catboost_pipeline.py` subclasses the shared `TreePipeline`). Tuning evaluates a
+reproducible sample of 20 configurations over depth {4, 6, 8}, learning rate {0.03, 0.1}, L2
+regularisation {1, 3, 10} and positive class weight {1, balanced}, picks the best by mean
+time-CV average precision (seed 0), and validates it with seeds 0, 1 and 2. Fits use up to
+1,500 trees with early stopping (patience 50) on unweighted average precision, on six CPU
+threads. Selected settings are written to `config/catboost_best_params.yaml`;
+`results/catboost_manifest.json` fingerprints the inputs and stops a resumed run if they changed.
+
+Sensitivity varies one parameter at a time from the selected F2 configuration (depth 3 to 10,
+learning rate 0.01 to 0.3, L2 0.1 to 30, class weight 1 to 100 or balanced), with three seeds
+each (21 configurations, 63 fits). Plots go to `reports/figures/sweep_catboost_F2_*.png`.
+
+**Categories:** only CatBoost's built-in one-hot encoding is used (`one_hot_max_size` at least
+the largest training cardinality), so no target statistics are computed and nothing is
+target-encoded. Raw `uid` is rejected as an input, and rows keep their time order
+(`has_time=True`).
+
+## 11. Validation grid summary (Step 11)
 
 ```bash
 .venv/bin/python -m src.summarise
@@ -201,7 +227,7 @@ Rebuilds `reports/grid_validation.md` from the validation rows of `results/log.c
 in the top 1%, with the LR → LightGBM and F0 → F2 gains. It refuses to build if any cell is
 missing a seed or has a repeated one.
 
-## 11. Leakage check (Step 12)
+## 12. Leakage check (Step 12)
 
 ```bash
 OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/python -u -m src.leakage
@@ -214,11 +240,7 @@ About 30 minutes and 2 GB peak memory; it resumes rather than duplicating rows a
 `results/step12_manifest.json`. `--report` only rebuilds `reports/leakage_check.md` from the
 log. `notebooks/05_leakage.ipynb` reads the log and saves `reports/figures/leakage_check.png`.
 
-## 12. Run the tests
-
-For the optional CatBoost extension, install `requirements-catboost.txt` and see
-[CATBOOST.md](CATBOOST.md) for tuning, sensitivity analysis, encoding policy and
-the dependency on the open shared implementation PR.
+## 13. Run the tests
 
 ```bash
 .venv/bin/python -m pytest -q tests
