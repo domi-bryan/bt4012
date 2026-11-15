@@ -1,6 +1,6 @@
 """Choosing model inputs on the training block: V-column pruning and a time-stability check.
 
-Both follow the EDA (notebooks/eda_features.ipynb sections 3, 11.1 and 13) and use training-block rows only.
+Both follow the EDA (notebooks/01_eda.ipynb sections 3, 11.1 and 13) and use training-block rows only.
 
 Time-stability check: for one column at a time, learn the fraud rate per value (or per quantile bin) on the
 first 30 days of the training block, use those rates to score the last 30 days, and compute the AUC there.

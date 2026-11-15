@@ -165,8 +165,8 @@ def write_report(tables, s):
         f"The 99th percentiles are {amount.loc[0, 'p99']:.2f} and {amount.loc[1, 'p99']:.2f}, respectively. "
         "Amounts are reported in dataset units because currency is not established here.", "",
         "The distribution chart uses log10(amount) and normalizes each class separately; it compares "
-        "distribution shapes, not the class counts. Fixed amount bands show observed fraud rates "
-        "with transaction counts. No outliers were removed.", "",
+        "distribution shapes, not the class counts. Its right panel shows the fraud rate by amount decile "
+        "with 95% intervals; the table below uses fixed amount bands. No outliers were removed.", "",
         rate_table(tables["amount_bins"]), "",
         "![Amount distributions and fraud rates](figures/eda_amounts.png)", "",
         "## Missing values", "",
@@ -189,8 +189,8 @@ def write_report(tables, s):
         "Category rates are unadjusted for other features and time. Small groups are unstable; "
         "use the displayed counts when interpreting differences.", "",
         "![Product card and device patterns](figures/eda_categories.png)", "",
-        "Email plots show the eight largest nonmissing domains by transaction count, missing rows, "
-        "and an aggregated remainder. Full category counts and fraud rates are saved separately. "
+        "Email plots show the 15 most frequent domains (missing included) with 95% intervals. "
+        "Full category counts and fraud rates are saved separately. "
         "Domain names are observed feature values; these rates do not imply wrongdoing by a provider.", "",
         "![Email domain patterns](figures/eda_email_domains.png)", "",
         "## Changes over time", "",

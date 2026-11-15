@@ -25,7 +25,7 @@ The strong imbalance supports the project's use of PR-AUC for later model evalua
 
 Legitimate transactions have mean 133.87 and median 68.50; fraud transactions have mean 149.04 and median 76.13. The 99th percentiles are 1104.00 and 994.00, respectively. Amounts are reported in dataset units because currency is not established here.
 
-The distribution chart uses log10(amount) and normalizes each class separately; it compares distribution shapes, not the class counts. Fixed amount bands show observed fraud rates with transaction counts. No outliers were removed.
+The distribution chart uses log10(amount) and normalizes each class separately; it compares distribution shapes, not the class counts. Its right panel shows the fraud rate by amount decile with 95% intervals; the table below uses fixed amount bands. No outliers were removed.
 
 | Group | Transactions | Fraud transactions | Fraud rate |
 | --- | --- | --- | --- |
@@ -66,7 +66,7 @@ Product C has the highest observed fraud rate (11.33%, n=56,410). Category rates
 
 ![Product card and device patterns](figures/eda_categories.png)
 
-Email plots show the eight largest nonmissing domains by transaction count, missing rows, and an aggregated remainder. Full category counts and fraud rates are saved separately. Domain names are observed feature values; these rates do not imply wrongdoing by a provider.
+Email plots show the 15 most frequent domains (missing included) with 95% intervals. Full category counts and fraud rates are saved separately. Domain names are observed feature values; these rates do not imply wrongdoing by a provider.
 
 ![Email domain patterns](figures/eda_email_domains.png)
 

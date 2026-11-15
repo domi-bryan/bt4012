@@ -83,18 +83,21 @@ This writes `reports/data_profile.md` and `config/features.yaml`, using the firs
 
 ## 5. Run exploratory data analysis
 
-After creating `cleaned.parquet`, run the EDA notebook locally:
+After creating `cleaned.parquet`, run the EDA notebook locally (about 1 minute):
 
 ```bash
-.venv/bin/python -m nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=180 notebooks/01_eda.ipynb
+.venv/bin/python -m nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=600 notebooks/01_eda.ipynb
 ```
 
-This uses only the first 472,432 rows by time. It produces an executed notebook,
-`reports/eda_findings.md`, twelve supporting CSV tables plus `summary.json` in
-`reports/eda/`, and seven `eda_*.png` figures in `reports/figures/`. Topics include
-class balance, transaction amounts, missingness, product/card/device/email categories,
-and weekly patterns. Category counts include missing values, and incomplete weeks
-are marked. No model is fitted and no V-column pruning is applied.
+`notebooks/01_eda.ipynb` is the single EDA notebook (it absorbed the former `01_profile.ipynb`).
+All label-based analysis uses the first 472,432 rows by time; the validation block is used
+without labels to measure shift. It regenerates `reports/eda_findings.md`, twelve supporting
+CSV tables plus `summary.json` in `reports/eda/`, and seven `eda_*.png` figures in
+`reports/figures/`. Topics: class balance, column groups and descriptive statistics,
+missingness and the V-column blocks, fraud over time, customer keys and `uid`, categories,
+amounts and D columns, past-behaviour and domain-knowledge checks, redundancy, train-validation
+shift, feature stability over time, and the proposed model inputs (section 13). No model is
+fitted, and it does not rewrite `config/features.yaml` (only `src.data_profile` does).
 
 To regenerate only the tables and findings report:
 
