@@ -348,3 +348,8 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
 - Caveat stated in each notebook: LR and RF use full grids, so values are compared on equal terms; LightGBM, XGBoost, CatBoost and the MLP use random search, so each value is paired with a different mix of other settings and the means are indicative rather than a controlled one-at-a-time sweep (as `Context.md`'s RQ4 plan describes). The tree count and epochs are set by early stopping, not tuned.
 - Checks: 3 new tests (fold averaging and incomplete combinations; unlimited depth kept as "none"; integer values kept as integers); full suite 117 passed. Test copies of the six model notebooks ran end to end with multi-setting grids on a data sample.
 
+
+## XGBoost on G0–G3 (2026-11-15)
+- Ran `07_xgboost.ipynb` in full: 20 settings tuned on G3 with time CV (80 rows in `results/log.csv`), then validated on G0–G3 with seeds 0–2 (12 rows). Chosen: learning rate 0.03, depth 10, min child weight 1, `reg_lambda` 1, no class weighting (CV PR-AUC 0.5788).
+- Validation PR-AUC: G0 0.5289, G1 0.5636, G2 0.5629, G3 0.5615. Known customers 0.6893 vs unknown 0.5081 on G3. Findings written in section 7 of the notebook.
+- Permutation importance saved to `results/importance/xgboost_G3.csv`. Validation and OOF scores in `results/preds/xgboost_*` (gitignored; to be shared on the group drive).
