@@ -6,6 +6,10 @@ constants (most common addr2 / card3, V-column missing groups), and those come f
 block (first 80% by time) via `fit_constants`.
 
 All new columns are prefixed `fe_`. `uid` is added as an identifier for grouping, not as a feature.
+
+Only features whose link to fraud holds between the first and last 30 days of the training block are
+built here; candidates that reversed, faded, showed no signal or had no EDA support are listed in
+`notebooks/feature_engineering.ipynb` section 10.
 """
 import re
 from pathlib import Path
@@ -16,13 +20,13 @@ import pandas as pd
 from src.data import ROOT
 
 N_TRAIN = 472_432          # train block = rows 0..472,431 (Context.md: first 80% by time)
-FEATURES_PATH = ROOT / "data" / "processed" / "features_v1.parquet"
-FEATURE_LIST_PATH = ROOT / "config" / "features_v1.yaml"
+FEATURES_PATH = ROOT / "data" / "processed" / "features_v2.parquet"
+FEATURE_LIST_PATH = ROOT / "config" / "features_v2.yaml"
 
 DAY = 86_400
 HOUR = 3_600
 M_TF_COLS = ["M1", "M2", "M3", "M5", "M6", "M7", "M8", "M9"]   # M4 holds M0/M1/M2, not T/F
-D_NORM_COLS = ["D1", "D4", "D10", "D15"]
+D_NORM_COLS = ["D1", "D4", "D10", "D11", "D15"]
 ID_COLS = ["TransactionID", "TransactionDT", "TransactionDay", "uid"]
 TARGET = "isFraud"
 
@@ -168,8 +172,6 @@ def amount_features(df):
         "fe_amt_log": np.log1p(amt),
         "fe_amt_cents": np.round(amt * 100) % 100,
         "fe_amt_decimals": decimals,
-        "fe_amt_round_dollar": (decimals == 0).astype(np.float64),
-        "fe_amt_round_10": np.isclose(amt % 10, 0, atol=1e-6).astype(np.float64),
         "fe_amt_lt5": (amt < 5).astype(np.float64),
     }, index=df.index)
 
@@ -185,9 +187,7 @@ def time_features(df, uid_key):
     dev = np.minimum(dev, 24 - dev)
     return pd.DataFrame({
         "fe_hour": hour,
-        "fe_dow": ((dt // DAY) % 7).astype(np.float64),
         "fe_uid_hour_dev": dev,
-        "fe_uid_hour_concentration": np.sqrt(ms ** 2 + mc ** 2),
     }, index=df.index)
 
 
@@ -197,16 +197,13 @@ def d_norm_features(df):
                         index=df.index)
 
 
-def novelty_features(df, uid_key, card_key):
+def novelty_features(df, uid_key):
     out = {}
-    for col, name in [("DeviceInfo", "device"), ("id_31", "browser"), ("id_30", "os"),
-                      ("id_33", "screen"), ("P_emaildomain", "email"), ("ProductCD", "product")]:
+    for col, name in [("DeviceInfo", "device"), ("id_31", "browser"), ("P_emaildomain", "email"),
+                      ("ProductCD", "product")]:
         out[f"fe_uid_new_{name}"] = new_value_flag(uid_key, df[col])
     for col, name in [("DeviceInfo", "device"), ("P_emaildomain", "email"), ("id_31", "browser")]:
         out[f"fe_uid_n_prior_{name}s"] = distinct_prior(uid_key, df[col])[0]
-    out["fe_card1_new_addr1"] = new_value_flag(card_key, df["addr1"])
-    out["fe_card1_n_prior_addr1"] = distinct_prior(card_key, df["addr1"])[0]
-    out["fe_card1_n_prior_emails"] = distinct_prior(card_key, df["P_emaildomain"])[0]
 
     # Device fingerprint: device string + OS + browser + screen; only where a device is recorded.
     has_dev = df["DeviceInfo"].notna().to_numpy()
@@ -228,9 +225,6 @@ def velocity_features(df, uid_key):
     prev_amt = prev_value(uid_key, amt)
     prev_t = prev_value(uid_key, dt)
     out["fe_uid_secs_since_prev"] = dt - prev_t
-    out["fe_uid_amt_rel_prev"] = _ratio(amt, prev_amt)
-    out["fe_uid_amt_rel_prior_mean"] = _ratio(amt, prior_mean(uid_key, amt))
-    out["fe_uid_amt_rel_prior_max"] = _ratio(amt, prior_max(uid_key, amt))
     has_prev = ~np.isnan(prev_amt)
     out["fe_uid_small_then_large"] = _flag((prev_amt < 5) & (amt >= 10 * prev_amt), has_prev)
     out["fe_uid_repeat_amt_count"] = prior_count(combine(uid_key, np.round(amt, 2)))
@@ -238,7 +232,6 @@ def velocity_features(df, uid_key):
         cnt, tot = window_prior(uid_key, dt, amt, w)
         out[f"fe_uid_count_{label}"] = cnt
         if label == "24h":
-            out["fe_uid_spend_24h"] = tot
             spent = (pd.Series(amt).groupby(uid_key, sort=False).cumsum().to_numpy() - amt)
             first_day = pd.Series(day).groupby(uid_key, sort=False).transform("min").to_numpy()
             daily_avg = spent / (day - first_day + 1)
@@ -279,15 +272,6 @@ def _browser_parts(v):
     return name, version
 
 
-def _os_family(v):
-    v = str(v).lower()
-    for key, fam in [("windows", "windows"), ("ios", "ios"), ("android", "android"),
-                     ("mac", "mac"), ("linux", "linux")]:
-        if v.startswith(key):
-            return fam
-    return "other"
-
-
 DEVICE_BRAND_RULES = [
     ("windows", ("windows",)), ("apple", ("ios device", "macos")),
     ("samsung", ("sm-", "samsung", "gt-", "sgh-")), ("motorola", ("moto", "xt")),
@@ -306,11 +290,11 @@ def _device_brand(v):
     return "other"
 
 
-def _screen(v):
-    m = re.match(r"^(\d+)x(\d+)$", str(v))
-    if not m or int(m.group(1)) == 0 or int(m.group(2)) == 0:     # "0x0" = not recorded
-        return (np.nan, np.nan)
-    return (float(m.group(1)), float(m.group(2)))
+def identity_os_missing(df):
+    """1 if the row has an identity record but no OS (id_30), 0 if it has both, NaN without an
+    identity record. OS, screen and related identity fields go missing together (EDA 6.1)."""
+    has_id = df["has_identity"].to_numpy() == 1
+    return _flag(df["id_30"].isna().to_numpy(), has_id)
 
 
 def identity_features(df):
@@ -336,33 +320,18 @@ def identity_features(df):
     newest = newest.where(np.isfinite(newest)).to_numpy()
     out["fe_browser_versions_behind"] = newest - version.to_numpy()
 
-    os_fam = _map_categories(df["id_30"], _os_family)
-    out["fe_os_family"] = os_fam
     out["fe_device_brand"] = _map_categories(df["DeviceInfo"], _device_brand)
-    scr = _map_categories(df["id_33"], _screen)
-    w = scr.map(lambda t: t[0] if isinstance(t, tuple) else np.nan).astype(np.float64).to_numpy()
-    h = scr.map(lambda t: t[1] if isinstance(t, tuple) else np.nan).astype(np.float64).to_numpy()
-    out["fe_screen_w"], out["fe_screen_h"] = w, h
-    out["fe_screen_area"] = w * h
-    out["fe_screen_aspect"] = _ratio(np.maximum(w, h), np.minimum(w, h))
-
-    dtype = df["DeviceType"].astype(object)
-    mobile_os = os_fam.isin(["ios", "android"])
-    desktop_os = os_fam.isin(["windows", "mac", "linux"])
-    mismatch = ((dtype == "desktop") & mobile_os) | ((dtype == "mobile") & desktop_os)
-    out["fe_devicetype_os_mismatch"] = _flag(mismatch.to_numpy(),
-                                              (dtype.notna() & os_fam.notna()).to_numpy())
+    out["fe_identity_os_missing"] = identity_os_missing(df)
     return pd.DataFrame(out, index=df.index)
 
 
-def geo_card_features(df, uid_key, consts):
+def geo_card_features(df, consts):
     addr2, card3 = df["addr2"], df["card3"]
     combo = df["card4"].astype(object).fillna("nan") + "_" + df["card6"].astype(object).fillna("nan")
     return pd.DataFrame({
         "fe_addr2_not_mode": _flag(addr2.to_numpy() != consts["addr2_mode"], addr2.notna().to_numpy()),
         "fe_card3_not_mode": _flag(card3.to_numpy() != consts["card3_mode"], card3.notna().to_numpy()),
         "fe_card4_card6": combo.to_numpy(),
-        "fe_uid_dist1_rel_prior_mean": _ratio(df["dist1"], prior_mean(uid_key, df["dist1"])),
     }, index=df.index)
 
 
@@ -385,11 +354,16 @@ def missing_features(df, uid_key, consts, raw_cols):
 
 
 def frequency_features(df):
+    """Share of all earlier rows that have the same value (NaN for a missing value or the first row).
+    The amount is compared rounded to cents."""
     position = np.arange(len(df), dtype=np.float64)
     out = {}
-    for col in ["card1", "addr1", "P_emaildomain", "DeviceInfo", "id_31", "id_33"]:
-        valid = df[col].notna().to_numpy()
-        share = _ratio(prior_count(combine(df[col])), position)
+    for col in ["card1", "addr1", "P_emaildomain", "DeviceInfo", "id_31", "TransactionAmt"]:
+        vals = df[col]
+        if col == "TransactionAmt":
+            vals = pd.Series(np.round(vals.to_numpy(np.float64), 2), index=df.index)
+        valid = vals.notna().to_numpy()
+        share = _ratio(prior_count(combine(vals)), position)
         out[f"fe_freq_{col}"] = np.where(valid, share, np.nan)
     return pd.DataFrame(out, index=df.index)
 
@@ -403,15 +377,14 @@ def build_features(df, consts):
     raw_cols = [c for c in df.columns if c not in ID_COLS and c != TARGET]
     uid = make_uid(df)
     uid_key = uid.cat.codes.to_numpy(np.int64)
-    card_key = combine(df["card1"])
     fams = {
         "amount": amount_features(df),
         "time": time_features(df, uid_key),
         "d_norm": d_norm_features(df),
-        "novelty": novelty_features(df, uid_key, card_key),
+        "novelty": novelty_features(df, uid_key),
         "velocity": velocity_features(df, uid_key),
         "identity": identity_features(df),
-        "geo_card": geo_card_features(df, uid_key, consts),
+        "geo_card": geo_card_features(df, consts),
         "missing": missing_features(df, uid_key, consts, raw_cols),
         "frequency": frequency_features(df),
     }
