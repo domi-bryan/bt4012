@@ -8,13 +8,19 @@ Runs on CPU so seeded runs are reproducible.
 import numpy as np
 import torch
 from sklearn.metrics import average_precision_score
+from sklearn.model_selection import ParameterSampler
 from torch import nn
 
 NAME = "mlp"
+EARLY_STOPPING = True   # src.experiment holds out rows for it in the G0-G3 runs
 DEFAULTS = {"hidden": 256, "dropout": 0.2, "lr": 1e-3, "batch_size": 2048,
-            "max_epochs": 40, "patience": 5}
-GRID = [{"hidden": h, "dropout": d, "lr": lr}
-        for h in (128, 256) for d in (0.1, 0.3) for lr in (3e-4, 1e-3)]
+            "max_epochs": 40, "patience": 5, "layers": 2, "weight_decay": 0.0}
+# Random search: 16 of 32 combinations, adding depth (2 or 3 hidden layers) and weight decay
+# (widened 2026-11-14; F0-F2 runs used the 8-setting grid over hidden x dropout x lr).
+GRID = list(ParameterSampler({
+    "hidden": [128, 256], "dropout": [0.1, 0.3], "lr": [3e-4, 1e-3],
+    "layers": [2, 3], "weight_decay": [0.0, 1e-5],
+}, n_iter=16, random_state=0))
 PREDICT_BATCH = 65536
 
 
@@ -22,12 +28,14 @@ def _tensor(X):
     return torch.from_numpy(np.ascontiguousarray(np.asarray(X, dtype="float32")))
 
 
-def build_net(n_in, hidden, dropout):
-    return nn.Sequential(
-        nn.Linear(n_in, hidden), nn.ReLU(), nn.Dropout(dropout),
-        nn.Linear(hidden, hidden // 2), nn.ReLU(), nn.Dropout(dropout),
-        nn.Linear(hidden // 2, 1),
-    )
+def build_net(n_in, hidden, dropout, layers=2):
+    """`layers` ReLU hidden layers, each half the width of the one before (hidden, hidden/2, ...)."""
+    blocks, width_in = [], n_in
+    for i in range(layers):
+        width = max(hidden // 2 ** i, 1)
+        blocks += [nn.Linear(width_in, width), nn.ReLU(), nn.Dropout(dropout)]
+        width_in = width
+    return nn.Sequential(*blocks, nn.Linear(width_in, 1))
 
 
 def _scores(net, X):
@@ -65,8 +73,8 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
         raise ValueError("MLP training requires both classes")
     pos_weight = (len(y) - pos) / pos
 
-    net = build_net(X.shape[1], p["hidden"], p["dropout"])
-    opt = torch.optim.Adam(net.parameters(), lr=p["lr"])
+    net = build_net(X.shape[1], p["hidden"], p["dropout"], p["layers"])
+    opt = torch.optim.Adam(net.parameters(), lr=p["lr"], weight_decay=p["weight_decay"])
     loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight))
     history = {"loss": [], "val_pr_auc": []}
     best, best_epoch, best_state, stale = -1.0, 0, None, 0
@@ -97,3 +105,10 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
 
 def predict_proba(model, X):
     return model.predict_proba(X)
+
+
+IMPORTANCE = None   # no built-in importance; use permutation importance (src/importance.py)
+
+
+def feature_importance(model, columns):
+    return None

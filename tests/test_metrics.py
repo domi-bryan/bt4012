@@ -114,3 +114,14 @@ def test_log_run_rejects_foreign_header(tmp_path):
     path.write_text("a,b\n1,2\n")
     with pytest.raises(ValueError, match="header"):
         results.log_run(path, **run_fields())
+
+
+def test_precision_top1pct_matches_count_and_recall():
+    from src.metrics import precision_top1pct, top_rows
+    rng = np.random.default_rng(5)
+    y = (rng.random(20_000) < 0.03).astype(int)
+    s = y * 0.6 + rng.random(20_000)
+    k = top_rows(len(y))
+    assert k == 200
+    assert precision_top1pct(y, s) == pytest.approx(y[np.argsort(-s)[:k]].mean())
+    assert precision_top1pct(y, s) == pytest.approx(metrics.recall_top1pct(y, s) * y.sum() / k)

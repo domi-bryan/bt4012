@@ -5,14 +5,22 @@ from sklearn.metrics import average_precision_score
 from sklearn.model_selection import ParameterSampler
 
 NAME = "lgbm"
+EARLY_STOPPING = True   # src.experiment holds out rows for it in the G0-G3 runs
+# Row and column subsampling (80% each, a fresh row sample every tree) match src/models/xgb.py
+# and src/models/catboost.py, so the three boosting models differ only in their algorithms.
+# Added 2026-11-14 for the G0-G3 runs; the earlier F0-F2 runs used no subsampling.
 DEFAULTS = {
     "n_estimators": 1500, "num_leaves": 63, "learning_rate": 0.05,
     "min_child_samples": 100, "scale_pos_weight": "balanced", "n_jobs": 6,
+    "subsample": 0.8, "subsample_freq": 1, "colsample_bytree": 0.8,
 }
+# L2 on leaf weights (reg_lambda) is tuned over the same values as XGBoost's reg_lambda and CatBoost's
+# l2_leaf_reg (added 2026-11-14; F0-F2 runs used LightGBM's default of 0).
 GRID = list(ParameterSampler({
     "num_leaves": [31, 63, 127],
     "learning_rate": [0.03, 0.1],
     "min_child_samples": [20, 100, 300],
+    "reg_lambda": [1.0, 3.0, 10.0],
     "scale_pos_weight": [1.0, "balanced"],
 }, n_iter=20, random_state=0))
 
@@ -61,3 +69,12 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
 
 def predict_proba(model, X):
     return model.predict_proba(X)
+
+
+IMPORTANCE = "total gain"
+
+
+def feature_importance(model, columns):
+    """Total gain of the splits on each input column."""
+    import pandas as pd
+    return pd.Series(model.clf.booster_.feature_importance("gain"), index=list(columns), dtype="float64")

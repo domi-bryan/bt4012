@@ -85,7 +85,7 @@ def test_d_norm_includes_d11():
 
 
 # Candidate features left out because their link to fraud reversed, faded or never showed over time, or the
-# EDA found no signal for them (notebooks/feature_engineering.ipynb section 10). They must not be built.
+# EDA found no signal for them (notebooks/02_feature_engineering.ipynb section 10). They must not be built.
 LEFT_OUT = ["fe_amt_round_dollar", "fe_amt_round_10", "fe_dow", "fe_uid_hour_concentration",
                  "fe_uid_new_os", "fe_uid_new_screen", "fe_os_family", "fe_screen_w", "fe_screen_h",
                  "fe_screen_area", "fe_screen_aspect", "fe_devicetype_os_mismatch",

@@ -6,10 +6,15 @@ from sklearn.metrics import average_precision_score
 from sklearn.model_selection import ParameterSampler
 
 NAME = "catboost"
+EARLY_STOPPING = True   # src.experiment holds out rows for it in the G0-G3 runs
+# Row and column subsampling (80% each: Bernoulli row sampling, `rsm` for columns) match
+# src/models/lgbm.py and src/models/xgb.py. Added 2026-11-14 for the G0-G3 runs; the earlier
+# F0-F2 runs used CatBoost's default (MVS) row sampling and all columns.
 DEFAULTS = {
     "iterations": 1500, "depth": 6, "learning_rate": 0.05,
     "l2_leaf_reg": 3.0, "scale_pos_weight": "balanced",
     "thread_count": 6, "early_stopping_rounds": 50,
+    "bootstrap_type": "Bernoulli", "subsample": 0.8, "rsm": 0.8,
 }
 GRID = list(ParameterSampler({
     "depth": [4, 6, 8], "learning_rate": [0.03, 0.1],
@@ -110,3 +115,12 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
 
 def predict_proba(model, X):
     return model.predict_proba(X)
+
+
+IMPORTANCE = "prediction values change"
+
+
+def feature_importance(model, columns):
+    """CatBoost's default importance: how much predictions change on average when a feature's split values change."""
+    return pd.Series(model.clf.get_feature_importance(), index=model.clf.feature_names_,
+                     dtype="float64").reindex(list(columns)).fillna(0.0)

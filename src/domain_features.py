@@ -1,6 +1,6 @@
 """Domain-knowledge features for IEEE-CIS, built past-only on the time-sorted joined table.
 
-Used by `notebooks/feature_engineering.ipynb`. Every behavioural feature for a row uses only rows
+Used by `notebooks/02_feature_engineering.ipynb`. Every behavioural feature for a row uses only rows
 earlier in the sort order (TransactionDT, TransactionID). The only values fitted on data are a few
 constants (most common addr2 / card3, V-column missing groups), and those come from the training
 block (first 80% by time) via `fit_constants`.
@@ -9,7 +9,7 @@ All new columns are prefixed `fe_`. `uid` is added as an identifier for grouping
 
 Only features whose link to fraud holds between the first and last 30 days of the training block are
 built here; candidates that reversed, faded, showed no signal or had no EDA support are listed in
-`notebooks/feature_engineering.ipynb` section 10.
+`notebooks/02_feature_engineering.ipynb` section 10.
 """
 import re
 from pathlib import Path

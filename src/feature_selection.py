@@ -22,7 +22,7 @@ from sklearn.metrics import roc_auc_score
 
 from src.data_profile import prune_group, v_groups
 
-V_THRESHOLD = 0.75          # chosen with notebooks/logreg_v_threshold.ipynb
+V_THRESHOLD = 0.75          # chosen with notebooks/03_v_threshold.ipynb
 WINDOW_DAYS = 30
 N_BINS = 20
 SMOOTH = 50
