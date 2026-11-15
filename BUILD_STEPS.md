@@ -62,7 +62,7 @@ Prerequisite: `data/raw/train_transaction.csv` and `data/raw/train_identity.csv`
 
 **Role:** A
 
-**Files:** `notebooks/01_profile.ipynb`, `reports/data_profile.md`, `config/features.yaml`
+**Files:** `notebooks/01_eda.ipynb` (section 3; was `01_profile.ipynb`), `reports/data_profile.md`, `config/features.yaml`
 
 **Do**
 
