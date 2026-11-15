@@ -225,12 +225,7 @@ Tests that need the real table are skipped if `joined.parquet` has not been buil
 - The last 10% of rows by time (the test block) is not scored until the group declares the experiment freeze.
 - Every feature uses only transactions earlier in time than the row it describes.
 - Every training run appends one row to `results/log.csv`.
-- Figures and notebook outputs are not committed, so teammates can explore without seeing
-  results first. PNGs in `reports/figures/` are gitignored and rebuilt by the notebooks.
-  Clear outputs before committing a notebook:
-
-  ```bash
-  .venv/bin/python -m nbconvert --clear-output --inplace notebooks/<name>.ipynb
-  ```
-
-  To keep your own executed copy, save it under `notebooks/executed/` (gitignored).
+- Notebooks are committed with their outputs, so the results and plots can be read on GitHub
+  without the data or a rerun. Run the notebook top to bottom before committing, so the outputs
+  match the code. Keep outputs short: print summary tables, not whole DataFrames.
+  PNGs in `reports/figures/` are gitignored and rebuilt by the notebooks.
