@@ -1,0 +1,63 @@
+"""LightGBM with fold-local class weights and PR-AUC early stopping."""
+import lightgbm as lgb
+import numpy as np
+from sklearn.metrics import average_precision_score
+from sklearn.model_selection import ParameterSampler
+
+NAME = "lgbm"
+DEFAULTS = {
+    "n_estimators": 1500, "num_leaves": 63, "learning_rate": 0.05,
+    "min_child_samples": 100, "scale_pos_weight": "balanced", "n_jobs": 6,
+}
+GRID = list(ParameterSampler({
+    "num_leaves": [31, 63, 127],
+    "learning_rate": [0.03, 0.1],
+    "min_child_samples": [20, 100, 300],
+    "scale_pos_weight": [1.0, "balanced"],
+}, n_iter=20, random_state=0))
+
+
+def _pr_auc(y_true, y_score):
+    return "pr_auc", average_precision_score(y_true, y_score), True
+
+
+class Model:
+    def __init__(self, clf):
+        self.clf = clf
+        self.run_metadata = {
+            "best_iteration": int(clf.best_iteration_ or clf.n_estimators_),
+            "resolved_scale_pos_weight": float(clf.get_params()["scale_pos_weight"]),
+        }
+
+    def predict_proba(self, X):
+        return self.clf.predict_proba(X)[:, 1]
+
+
+def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
+    """Stop after 50 rounds without an improvement in validation average precision."""
+    p = {**DEFAULTS, **(params or {})}
+    y = np.asarray(y)
+    if p["scale_pos_weight"] == "balanced":
+        positives = np.count_nonzero(y == 1)
+        if positives == 0 or positives == len(y):
+            raise ValueError("LightGBM training requires both classes")
+        p["scale_pos_weight"] = float((len(y) - positives) / positives)
+    clf = lgb.LGBMClassifier(
+        **p, objective="binary", metric="None", verbosity=-1,
+        random_state=seed, deterministic=True, force_col_wise=True,
+    )
+    if (X_val is None) != (y_val is None):
+        raise ValueError("Supply both X_val and y_val for early stopping")
+    kwargs = {}
+    if X_val is not None:
+        kwargs = {
+            "eval_set": [(X_val, np.asarray(y_val))],
+            "eval_metric": _pr_auc,
+            "callbacks": [lgb.early_stopping(50, first_metric_only=True, verbose=False)],
+        }
+    clf.fit(X, y, **kwargs)
+    return Model(clf)
+
+
+def predict_proba(model, X):
+    return model.predict_proba(X)

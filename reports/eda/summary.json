@@ -1,0 +1,18 @@
+{
+  "source": "data/processed/cleaned.parquet",
+  "scope": "training only; rows 0 through 472431 in chronological order",
+  "train_rows": 472432,
+  "columns": 436,
+  "fraud_count": 16599,
+  "fraud_rate": 0.03513521522674162,
+  "first_transaction_dt": 86400,
+  "last_transaction_dt": 12192842,
+  "first_day": 1,
+  "last_day": 141,
+  "missing_cells_pct": 44.864694667576835,
+  "columns_with_missing": 414,
+  "columns_over_90pct_missing": 12,
+  "table_reconciliation_passed": true,
+  "validation_or_test_analyzed": false,
+  "fitted_transforms_or_models": false
+}

@@ -60,3 +60,43 @@ def test_real_joined_table():
     assert df["TransactionDT"].is_monotonic_increasing
     obj = [c for c in df.columns if df[c].dtype == object]
     assert obj == []
+
+
+def test_cleaned_preserves_missingness_and_extreme_values(raw_dir, tmp_path):
+    df = data.load_raw(raw_dir)
+    df.loc[0, "TransactionAmt"] = 1_000_000
+    before = df.copy(deep=True)
+    path = data.save_cleaned(df, tmp_path / "cleaned.parquet")
+    pd.testing.assert_frame_equal(data.load_cleaned(path), before, check_exact=True)
+    pd.testing.assert_frame_equal(df, before, check_exact=True)
+
+
+@pytest.mark.parametrize("column,value,message", [
+    ("TransactionID", 1, "unique"),
+    ("isFraud", 2, "binary"),
+    ("TransactionAmt", 0, "positive"),
+    ("TransactionAmt", float("nan"), "nonmissing"),
+    ("card1", float("inf"), "infinite"),
+    ("TransactionDT", -1, "nonnegative"),
+    ("TransactionDay", 99, "does not match"),
+    ("has_identity", 0, "identity values"),
+])
+def test_cleaned_rejects_corruption_before_writing(raw_dir, tmp_path, column, value, message):
+    df = data.load_raw(raw_dir)
+    df.loc[0, column] = value
+    path = tmp_path / "cleaned.parquet"
+    with pytest.raises(ValueError, match=message):
+        data.save_cleaned(df, path)
+    assert not path.exists()
+
+
+def test_cleaned_rejects_out_of_order_rows(raw_dir):
+    df = data.load_raw(raw_dir).iloc[::-1].reset_index(drop=True)
+    with pytest.raises(ValueError, match="ordered"):
+        data.validate_cleaned(df)
+
+
+@pytest.mark.parametrize("path", [data.JOINED_PATH, data.RAW_DIR / "train_transaction.csv"])
+def test_cleaned_cannot_overwrite_inputs(raw_dir, path):
+    with pytest.raises(ValueError, match="must not overwrite"):
+        data.save_cleaned(data.load_raw(raw_dir), path)

@@ -8,3 +8,8 @@ data/processed/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# Generated outputs stay local so teammates explore without seeing results first.
+# Figures are rebuilt by the notebooks; notebooks are committed with outputs cleared.
+reports/figures/*.png
+notebooks/executed/
