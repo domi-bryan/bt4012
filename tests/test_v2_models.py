@@ -92,6 +92,10 @@ def test_xgb_contract():
         assert abs(fitted.run_metadata["resolved_scale_pos_weight"] - (yt == 0).sum() / yt.sum()) < 1e-9
         assert 0 < fitted.run_metadata["best_iteration"] < 200
         assert np.array_equal(s, xgb.predict_proba(xgb.fit(X, yt, V, yv, params, seed=1), V))
+        rounds = xgb.refit_params(fitted)                  # refit without early stopping, fixed tree count
+        assert rounds == {"n_estimators": fitted.run_metadata["best_iteration"]}
+        refit = xgb.fit(X, yt, None, None, {**params, **rounds}, seed=1)
+        assert refit.clf.get_booster().num_boosted_rounds() == rounds["n_estimators"]
         try:
             xgb.fit(X, yt, V, None, params)
             raise SystemExit("missing y_val was accepted")
@@ -159,7 +163,11 @@ def test_segment_pr_auc_with_bootstrap():
 
 
 def test_early_stopping_rows_are_held_out_of_scored_rows(transactions, tmp_path, monkeypatch):
-    """G0-G3 runs: early-stopping models stop on the last 10% of their training part, never on scored rows."""
+    """G0-G3 runs: early-stopping models stop on the last 10% of their training part, never on scored rows.
+
+    Tuning fits stop there and are scored as they are; the validation fit then refits on the whole
+    training block with the stopping point it found (two fits). Logistic regression trains on all rows.
+    """
     from src.models import logreg
     from src.split import time_cv_folds
     tr, va, _ = holdout_indices(transactions)
@@ -168,8 +176,10 @@ def test_early_stopping_rows_are_held_out_of_scored_rows(transactions, tmp_path,
     def spy(module):
         original = module.fit
         def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
-            seen.append((module.NAME, X.index.to_numpy(), None if X_val is None else X_val.index.to_numpy()))
-            return original(X, y, X_val, y_val, params, seed)
+            fitted = original(X, y, X_val, y_val, params, seed)
+            seen.append((module.NAME, X.index.to_numpy(), None if X_val is None else X_val.index.to_numpy(),
+                         dict(params or {}), getattr(fitted, "run_metadata", {})))
+            return fitted
         monkeypatch.setattr(module, "fit", fit)
 
     spy(lgbm)
@@ -178,24 +188,81 @@ def test_early_stopping_rows_are_held_out_of_scored_rows(transactions, tmp_path,
     tree = lambda cols: data.TreePipeline("lgbm", columns=cols)
     linear = lambda cols: data.LinearPipeline(columns=cols)
     experiment.tune_and_validate(lgbm, tree, transactions, tr, va, sets,
-                                 [{"num_leaves": 7, "n_estimators": 20, "n_jobs": 1}], seeds=(0,),
+                                 [{"num_leaves": 7, "n_estimators": 200, "n_jobs": 1}], seeds=(0,),
                                  log_path=tmp_path / "log.csv", preds_dir=tmp_path / "p")
     experiment.tune_and_validate(logreg, linear, transactions, tr, va, sets, [{"C": 1.0}], seeds=(0,),
                                  log_path=tmp_path / "log.csv", preds_dir=tmp_path / "p")
-    parts = [a for a, _ in time_cv_folds(transactions, tr)] + [tr]
-    scored = [b for _, b in time_cv_folds(transactions, tr)] + [va]
+    folds = time_cv_folds(transactions, tr)
     lg = [s for s in seen if s[0] == "lgbm"]
     lr = [s for s in seen if s[0] == "logreg"]
-    assert len(lg) == len(lr) == len(parts)
-    for (_, fit_rows, es_rows), part, score in zip(lg, parts, scored):
+    assert len(lg) == len(folds) + 2 and len(lr) == len(folds) + 1
+    # tuning folds and step 1 of the validation fit: first 90% of the part, stop on the last 10%
+    for (_, fit_rows, es_rows, _, _), (part, score) in zip(lg, folds + [(tr, va)]):
         fit_pos, es_pos = experiment.split_early_stopping(part, experiment.ES_FRACTION)
-        assert np.array_equal(fit_rows, transactions.index[fit_pos])          # first 90% of the part
-        assert np.array_equal(es_rows, transactions.index[es_pos])            # last 10%, by time
+        assert np.array_equal(fit_rows, transactions.index[fit_pos])
+        assert np.array_equal(es_rows, transactions.index[es_pos])
         assert not set(es_rows) & set(transactions.index[score])              # never the scored rows
-    for (_, fit_rows, _), part in zip(lr, parts):
+    # step 2: the whole training block, no early stopping, the stopping point from step 1
+    _, fit_rows, es_rows, params, _ = lg[-1]
+    step1_meta = lg[-2][4]
+    assert np.array_equal(fit_rows, transactions.index[tr]) and es_rows is None
+    assert params["n_estimators"] == step1_meta["best_iteration"] < 200
+    for (_, fit_rows, _, _, _), part in zip(lr, [a for a, _ in folds] + [tr]):
         assert np.array_equal(fit_rows, transactions.index[part])             # no early stopping: all rows
-    fit_meta = [json.loads(p)["_fit"] for p in pd.read_csv(tmp_path / "log.csv").query("model == 'lgbm'").params]
-    assert all(m["early_stopping_rows"] > 0 for m in fit_meta)
+    log = pd.read_csv(tmp_path / "log.csv")
+    lg_params = [json.loads(p) for p in log.query("model == 'lgbm'").params]
+    assert all(p["es_setup"] == experiment.ES_SETUP and p["_fit"]["early_stopping_rows"] > 0 for p in lg_params)
+    val = [p for p in lg_params if "threshold" in p][0]
+    assert val["_fit"]["refit"] == {"n_estimators": step1_meta["best_iteration"]}
+    assert all("es_setup" not in json.loads(p) for p in log.query("model == 'logreg'").params)
+
+
+def test_refit_params_fix_the_stopping_point(transactions):
+    """LightGBM and CatBoost: the refit trains exactly the trees early stopping kept (XGBoost: subprocess test)."""
+    from src.models import catboost
+    tr, va, _ = holdout_indices(transactions)
+    cols = ["a", "b", "cat"]
+    tp = data.TreePipeline("lgbm", columns=cols).fit(transactions.iloc[tr])
+    X, V = tp.transform(transactions.iloc[tr]), tp.transform(transactions.iloc[va])
+    y, v = transactions.isFraud.iloc[tr], transactions.isFraud.iloc[va]
+    stopped = lgbm.fit(X, y, V, v, {"n_estimators": 300, "n_jobs": 1})
+    rounds = lgbm.refit_params(stopped)
+    assert rounds == {"n_estimators": stopped.run_metadata["best_iteration"]} and rounds["n_estimators"] < 300
+    assert lgbm.fit(X, y, None, None, {"n_jobs": 1, **rounds}).clf.booster_.num_trees() == rounds["n_estimators"]
+    cp = CatBoostPipeline(columns=cols).fit(transactions.iloc[tr])
+    X, V = cp.transform(transactions.iloc[tr]), cp.transform(transactions.iloc[va])
+    stopped = catboost.fit(X, y, V, v, {"iterations": 300, "thread_count": 1})
+    rounds = catboost.refit_params(stopped)
+    assert rounds == {"iterations": stopped.run_metadata["best_iteration"]} and rounds["iterations"] < 300
+    assert catboost.fit(X, y, None, None, {"thread_count": 1, **rounds}).clf.tree_count_ == rounds["iterations"]
+
+
+def test_older_early_stopping_runs_are_superseded(transactions, tmp_path):
+    """Rows from the 1,500-tree, no-refit setup are rerun, not reused, and left out of the summaries."""
+    tr, va, _ = holdout_indices(transactions)
+    sets = {"S": ["a", "b", "cat"]}
+    grid = [{"num_leaves": 7, "n_estimators": 20, "n_jobs": 1}]
+    log, preds = tmp_path / "log.csv", tmp_path / "p"
+    make = lambda cols: data.TreePipeline("lgbm", columns=cols)
+    experiment.tune_and_validate(lgbm, make, transactions, tr, va, sets, grid, seeds=(0,), log_path=log,
+                                 preds_dir=preds, save_oof=True)
+    rows = pd.read_csv(log)
+    old = rows.copy()                                  # the same runs as logged before es_setup existed
+    old["params"] = old.params.map(lambda p: json.dumps({k: v for k, v in json.loads(p).items() if k != "es_setup"}))
+    old["pr_auc"] = 0.0
+    lr_row = rows.iloc[[0]].assign(model="logreg", params=json.dumps({"C": 1.0, "fold": 1, "_fit": {}}))
+    pd.concat([old, lr_row]).to_csv(log, index=False)
+    pd.read_parquet(preds / "lgbm_S_oof_seed0.parquet").drop(columns="es_setup").to_parquet(
+        preds / "lgbm_S_oof_seed0.parquet")
+    experiment.tune_and_validate(lgbm, make, transactions, tr, va, sets, grid, seeds=(0,), log_path=log,
+                                 preds_dir=preds, save_oof=True)
+    after = pd.read_csv(log)
+    assert len(after) == len(old) + 1 + len(rows)                         # everything rerun once
+    assert len(experiment.current_runs(after)) == len(rows) + 1           # old lgbm rows dropped, LR kept
+    cv, val = experiment.run_summary("lgbm", ["S"], log)
+    assert (cv.cv_pr_auc > 0).all() and (val.pr_auc_mean > 0).all() and len(val) == 1
+    assert "es_setup" not in val.settings[0]
+    assert (pd.read_parquet(preds / "lgbm_S_oof_seed0.parquet").es_setup == experiment.ES_SETUP).all()
 
 
 def test_fit_final_matches_validation_run_and_is_cached(transactions, tmp_path):

@@ -67,6 +67,11 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
     return Model(clf)
 
 
+def refit_params(model):
+    """The stopping point found by early stopping, as settings for a refit without it."""
+    return {"n_estimators": model.run_metadata["best_iteration"]}
+
+
 def predict_proba(model, X):
     return model.predict_proba(X)
 

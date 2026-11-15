@@ -72,6 +72,63 @@ def _prepare(model, make_pipeline, df, train_part, score_idx, es_fraction):
     return pipe, X, y, X_es, y_es, X_s, y_s, len(es_idx)
 
 
+def _refits(model, es_fraction):
+    """True when a fit uses the two-step early stopping of the G0-G3 runs (see `_fit_on_part`)."""
+    return bool(es_fraction) and _uses_early_stopping(model)
+
+
+def _run_params(model, params, es_fraction):
+    """`params` as logged and looked up: runs with the two-step early stopping also record `es_setup`."""
+    return {**params, "es_setup": ES_SETUP} if _refits(model, es_fraction) else dict(params)
+
+
+def _fit_on_part(model, make_pipeline, df, train_part, score_idx, params, seed, es_fraction):
+    """Fit `params` on a training part and score `score_idx` (skipped when None).
+
+    With `es_fraction` and a model that early-stops, this takes two fits:
+      1. fit on the first (1 - es_fraction) of the part by time, early-stopping on the last es_fraction,
+         and keep only the stopping point (`model.refit_params`: trees, or epochs for the MLP);
+      2. refit the pipeline and the model on the whole part with that stopping point and no early stopping.
+    The scored rows are used in neither step, and the most recent training rows still reach the final model.
+    Otherwise it is one fit on the whole part (an early-stopping model then stops on the scored rows,
+    as in the F0-F2 runs).
+    Returns (fitted model, fitted pipeline, scored labels, scores, runtime in seconds, run metadata).
+    """
+    if _refits(model, es_fraction):
+        fit_idx, es_idx = split_early_stopping(train_part, es_fraction)
+        pipe = make_pipeline().fit(df.iloc[fit_idx])
+        X, y = _xy(pipe, df, fit_idx)
+        X_es, y_es = _xy(pipe, df, es_idx)
+        set_seeds(seed)
+        t0 = time.time()
+        first = model.fit(X, y, X_es, y_es, params, seed=seed)
+        rounds = model.refit_params(first)
+        meta = {**getattr(first, "run_metadata", {}), "early_stopping_rows": len(es_idx), "refit": rounds}
+        del X, y, X_es, y_es, first
+        pipe = make_pipeline().fit(df.iloc[train_part])
+        X, y = _xy(pipe, df, train_part)
+        set_seeds(seed)
+        fitted = model.fit(X, y, None, None, {**params, **rounds}, seed=seed)
+    else:
+        if score_idx is None and _uses_early_stopping(model):
+            raise ValueError("An early-stopping model needs es_fraction or rows to stop on")
+        pipe = make_pipeline().fit(df.iloc[train_part])
+        X, y = _xy(pipe, df, train_part)
+        X_s, y_s = _xy(pipe, df, score_idx) if score_idx is not None else (None, None)
+        set_seeds(seed)
+        t0 = time.time()
+        # models without early stopping ignore X_val; the F0-F2 runs early-stopped on the scored rows
+        fitted = model.fit(X, y, X_s, y_s, params, seed=seed)
+        meta = dict(getattr(fitted, "run_metadata", {}))
+        score = fitted.predict_proba(X_s) if score_idx is not None else None
+        return fitted, pipe, y_s, score, time.time() - t0, meta
+    y_s = score = None
+    if score_idx is not None:
+        X_s, y_s = _xy(pipe, df, score_idx)
+        score = fitted.predict_proba(X_s)
+    return fitted, pipe, y_s, score, time.time() - t0, meta
+
+
 def logged_run(model_name, feature_set, split, seed, params, log_path=LOG_PATH):
     """Find an exact run, ignoring only recorded outcomes (threshold/model metadata).
 
@@ -106,8 +163,9 @@ def time_cv(model, make_pipeline, df, train_idx, grid, feature_set, seed=0, log_
     for k, (a, b) in enumerate(time_cv_folds(df, train_idx), start=1):
         prepared = False
         for params in grid:
-            old = (logged_run(model.NAME, feature_set, "cv", seed, {**params, "fold": k},
-                              log_path) if resume else None)
+            old = (logged_run(model.NAME, feature_set, "cv", seed,
+                              {**_run_params(model, params, es_fraction), "fold": k}, log_path)
+                   if resume else None)
             if old is not None:
                 rows.append({**old, "fold": k, "params": params})
                 continue
@@ -116,7 +174,7 @@ def time_cv(model, make_pipeline, df, train_idx, grid, feature_set, seed=0, log_
                 prepared = True
             fitted, score, runtime = _fit_score(model, Xa, ya, Xe, ye, params, seed, X_score=Xb)
             metrics = evaluate(yb, score)
-            logged_params = {**params, "fold": k}
+            logged_params = {**_run_params(model, params, es_fraction), "fold": k}
             if hasattr(fitted, "run_metadata"):
                 logged_params["_fit"] = dict(fitted.run_metadata)
             if n_es:
@@ -141,22 +199,20 @@ def best_params(cv_rows):
 
 def fit_validate(model, make_pipeline, df, train_idx, val_idx, params, feature_set, seed=0,
                  log_path=LOG_PATH, es_fraction=None):
-    """Refit on the whole train block, score validation, pick the F1 threshold there, log one val row.
+    """Fit on the whole train block, score validation, pick the F1 threshold there, log one val row.
 
     The threshold is stored in params so final test scoring can reuse it. With `es_fraction`, an
-    early-stopping model trains on the train block minus its last `es_fraction` (by time), which
-    is used for early stopping instead of the validation block.
+    early-stopping model finds its stopping point on the last `es_fraction` of the train block (by
+    time) and is then refit on the whole block with it (`_fit_on_part`); the validation block is
+    never used for early stopping.
     """
-    pipe, X, y, X_es, y_es, X_val, y_val, n_es = _prepare(model, make_pipeline, df, train_idx, val_idx,
-                                                          es_fraction)
-    fitted, score, runtime = _fit_score(model, X, y, X_es, y_es, params, seed, X_score=X_val)
+    fitted, pipe, y_val, score, runtime, meta = _fit_on_part(model, make_pipeline, df, train_idx, val_idx,
+                                                             params, seed, es_fraction)
     threshold = pick_threshold(y_val, score)
     metrics = evaluate(y_val, score, threshold)
-    logged_params = {**params, "threshold": threshold}
-    if hasattr(fitted, "run_metadata"):
-        logged_params["_fit"] = dict(fitted.run_metadata)
-    if n_es:
-        logged_params.setdefault("_fit", {})["early_stopping_rows"] = n_es
+    logged_params = {**_run_params(model, params, es_fraction), "threshold": threshold}
+    if meta:
+        logged_params["_fit"] = meta
     log_run(log_path, model=model.NAME, feature_set=feature_set, cv_scheme="holdout",
             split="val", seed=seed, params=logged_params,
             runtime_s=round(runtime, 2), **metrics)
@@ -183,6 +239,13 @@ VAL_SEEDS = (0, 1, 2)
 # Share of each training part (the last rows by time) held out for early stopping in the G0-G3 runs,
 # so LightGBM, XGBoost, CatBoost and the MLP never early-stop on the rows they are scored on.
 ES_FRACTION = 0.1
+# Early-stopping setup of the G0-G3 runs, logged as params["es_setup"] by the models that early-stop.
+#   1 (2026-11-14, not logged): validation and OOF models trained on the first 90% only.
+#   2 (2026-11-16): validation, OOF and final models find the stopping point on the last
+#     10% and are then refit on the whole training part with it. Tuning (time CV) still early-stops on
+#     the last 10% of each fold without a refit, the same for every setting.
+# Rows of early-stopping models from another setup are left out of the summaries (`current_runs`).
+ES_SETUP = 2
 
 
 def save_predictions(path, df, idx, score, **meta):
@@ -204,16 +267,22 @@ def oof_predictions(model, make_pipeline, df, train_idx, params, feature_set, se
     Covers the rows of folds 1-4 (days 31 to 141). Used to train a stacking model later.
     """
     path = preds_dir / f"{model.NAME}_{feature_set}_oof_seed{seed}.parquet"
+    setup = ES_SETUP if _refits(model, es_fraction) else None
     if path.exists():
-        return path
+        saved = pd.read_parquet(path, columns=None)
+        saved_setup = saved["es_setup"].iloc[0] if "es_setup" in saved else None
+        if setup is None or saved_setup == setup:
+            return path
+        print(f"{path.name}: saved under an older early-stopping setup, recomputing", flush=True)
     parts = []
     for k, (a, b) in enumerate(time_cv_folds(df, train_idx), start=1):
-        _, Xa, ya, Xe, ye, Xb, yb, _ = _prepare(model, make_pipeline, df, a, b, es_fraction)
-        _, score, _ = _fit_score(model, Xa, ya, Xe, ye, params, seed, X_score=Xb)
+        _, _, yb, score, _, _ = _fit_on_part(model, make_pipeline, df, a, b, params, seed, es_fraction)
         parts.append(pd.DataFrame({"TransactionID": df["TransactionID"].iloc[b].to_numpy(),
                                    "isFraud": yb, "score": score, "fold": k}))
     out = pd.concat(parts, ignore_index=True)
     out["params"] = json.dumps(params, sort_keys=True)
+    if setup is not None:
+        out["es_setup"] = setup
     path.parent.mkdir(parents=True, exist_ok=True)
     out.to_parquet(path, index=False)
     return path
@@ -230,7 +299,8 @@ def tune_and_validate(model, make_pipeline, df, train_idx, val_idx, feature_sets
     every set, so the sets are compared with the model settings held fixed.
 
     Models that early-stop (LightGBM, XGBoost, CatBoost, MLP) hold out the last `es_fraction` of
-    each training part for it, so no model ever sees the rows it is scored on.
+    each training part for it, so no model ever sees the rows it is scored on. In tuning that is the
+    whole fit; validation and OOF fits then refit on the whole training part (`_fit_on_part`).
 
     Everything already in the log is skipped, so a notebook can be stopped and rerun.
     Validation scores are saved to `preds_dir`; with `save_oof` the time-CV fold scores of
@@ -252,7 +322,8 @@ def tune_and_validate(model, make_pipeline, df, train_idx, val_idx, feature_sets
         build = lambda cols=cols: make_pipeline(cols)
         for seed in seeds:
             path = preds_dir / f"{model.NAME}_{name}_val_seed{seed}.parquet"
-            if logged_run(model.NAME, name, "val", seed, params, log_path) is not None:
+            if logged_run(model.NAME, name, "val", seed, _run_params(model, params, es_fraction),
+                          log_path) is not None:
                 note = "" if path.exists() else " (scores not saved; delete its log row to rerun)"
                 print(f"{model.NAME}/{name} seed {seed}: validation already logged{note}", flush=True)
                 continue
@@ -281,6 +352,22 @@ def _precision_top1pct(recall, rows, fraud):
     return recall * fraud / top_rows(rows)
 
 
+NOT_SETTINGS = ("fold", "threshold", "_fit", "es_setup")   # logged keys that are not model settings
+
+
+def current_runs(log):
+    """Leave out log rows of early-stopping models from an older early-stopping setup.
+
+    A row with early-stopping rows held out (`_fit.early_stopping_rows`) counts only if it was logged with
+    the current `es_setup`. Rows without a hold-out (logistic regression, random forest, and the F0-F2 runs,
+    which early-stopped on the scored rows) are kept as they are.
+    """
+    params = log["params"].map(json.loads)
+    held_out = params.map(lambda d: "early_stopping_rows" in (d.get("_fit") or {}))
+    current = params.map(lambda d: d.get("es_setup") == ES_SETUP)
+    return log[~held_out | current]
+
+
 def run_summary(model_name, feature_sets, log_path=LOG_PATH, sizes=None):
     """(cv, val) tables for one model from the log, for the G sets given.
 
@@ -290,13 +377,14 @@ def run_summary(model_name, feature_sets, log_path=LOG_PATH, sizes=None):
     With `sizes` from `block_sizes`, both also get precision in the top 1%, derived from the logged
     recall (precision = recall * fraud rows / rows flagged), so past runs need no refit.
     """
-    log = pd.read_csv(log_path)
+    log = current_runs(pd.read_csv(log_path))
     log = log[(log["model"] == model_name) & (log["feature_set"].isin(list(feature_sets)))].copy()
     params = log["params"].map(json.loads)
     log["settings"] = params.map(lambda d: json.dumps(
-        {k: v for k, v in d.items() if k not in ("fold", "threshold", "_fit")}, sort_keys=True))
+        {k: v for k, v in d.items() if k not in NOT_SETTINGS}, sort_keys=True))
     log["fold"] = params.map(lambda d: d.get("fold"))
-    log["threshold"] = params.map(lambda d: d.get("threshold"))
+    # float even when no rows are left (e.g. every run of a model is from an older setup)
+    log["threshold"] = pd.to_numeric(params.map(lambda d: d.get("threshold")), errors="coerce").astype("float64")
     if sizes is not None:
         def prec(r):
             rows, fraud = sizes["val"] if r["split"] == "val" else sizes["cv"][int(r["fold"])]
@@ -322,8 +410,8 @@ MODELS_DIR = ROOT / "results" / "models"
 
 def fit_final(model, make_pipeline, df, train_idx, params, feature_set, seed=0, es_fraction=ES_FRACTION,
               cache_dir=MODELS_DIR):
-    """Refit `params` on the training block exactly as `fit_validate` does (same rows, same early-stopping
-    hold-out, same seed), without logging. Returns (fitted model, fitted pipeline).
+    """Refit `params` on the training block exactly as `fit_validate` does (same rows, same two-step
+    early stopping, same seed), without logging. Returns (fitted model, fitted pipeline).
 
     The pair is cached as results/models/<model>_<set>_seed<seed>.pkl (gitignored) with the settings, so
     reruns, feature importance and the final test scoring reuse it instead of refitting.
@@ -331,23 +419,20 @@ def fit_final(model, make_pipeline, df, train_idx, params, feature_set, seed=0, 
     import pickle
     path = None if cache_dir is None else cache_dir / f"{model.NAME}_{feature_set}_seed{seed}.pkl"
     key = json.dumps(params, sort_keys=True)
+    setup = ES_SETUP if _refits(model, es_fraction) else None
     if path is not None and path.exists():
         with open(path, "rb") as handle:
             saved = pickle.load(handle)
-        if saved.get("params") == key and saved.get("es_fraction") == es_fraction:
+        if (saved.get("params") == key and saved.get("es_fraction") == es_fraction
+                and saved.get("es_setup") == setup):
             return saved["model"], saved["pipeline"]
-    fit_idx, es_idx = (split_early_stopping(train_idx, es_fraction)
-                       if es_fraction and _uses_early_stopping(model) else (np.asarray(train_idx), None))
-    pipe = make_pipeline().fit(df.iloc[fit_idx])
-    X, y = _xy(pipe, df, fit_idx)
-    X_es, y_es = _xy(pipe, df, es_idx) if es_idx is not None else (None, None)
-    set_seeds(seed)
-    fitted = model.fit(X, y, X_es, y_es, params, seed=seed)
+    fitted, pipe, _, _, _, _ = _fit_on_part(model, make_pipeline, df, train_idx, None, params, seed, es_fraction)
     if path is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with open(path, "wb") as handle:
-                pickle.dump({"model": fitted, "pipeline": pipe, "params": key, "es_fraction": es_fraction}, handle)
+                pickle.dump({"model": fitted, "pipeline": pipe, "params": key, "es_fraction": es_fraction,
+                             "es_setup": setup}, handle)
         except Exception as exc:   # a model that can't be pickled is simply not cached
             path.unlink(missing_ok=True)
             print(f"not cached ({type(exc).__name__}: {exc})")
@@ -364,13 +449,13 @@ def setting_sensitivity(model_name, feature_set, log_path=LOG_PATH, folds=None):
     marginal means are indicative rather than a controlled one-at-a-time sweep.
     Returns one row per (setting, value): setting, value, mean, best, worst, combinations.
     """
-    log = pd.read_csv(log_path)
+    log = current_runs(pd.read_csv(log_path))
     cv = log[(log["model"] == model_name) & (log["feature_set"] == feature_set) & (log["split"] == "cv")]
     if cv.empty:
         return pd.DataFrame(columns=["setting", "value", "mean", "best", "worst", "combinations"])
     params = cv["params"].map(json.loads)
     cv = cv.assign(settings=params.map(lambda d: json.dumps(
-        {k: v for k, v in d.items() if k not in ("fold", "threshold", "_fit")}, sort_keys=True)))
+        {k: v for k, v in d.items() if k not in NOT_SETTINGS}, sort_keys=True)))
     per = cv.groupby("settings")["pr_auc"].agg(["mean", "count"])
     per = per[per["count"] == (folds or per["count"].max())]
     # dtype=object keeps None (unlimited depth) and integers as they were logged

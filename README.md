@@ -133,7 +133,10 @@ Each model has its own notebook: `04_logreg`, `05_random_forest`, `06_lightgbm`,
    use a random 80% of rows and 80% of columns per tree (fixed, not tuned), and all three tune L2 regularisation on
    the leaf weights over {1, 3, 10}, so they differ only in their algorithms.
    Models that early-stop (the three boosting models and the MLP) hold out the last 10% (by time) of each training
-   part for it, so no model is ever tuned or stopped on the rows it is scored on. Search budgets: logistic
+   part for it, so no model is ever tuned or stopped on the rows it is scored on. In tuning that is the whole fit;
+   validation (and the saved fold scores) then refit on the whole training part with the stopping point found
+   (number of trees, or epochs for the MLP), so the scored model trains on every training row, as logistic
+   regression and random forest do. Search budgets: logistic
    regression 11 settings (grid), random forest 12 (grid), MLP 16 (random), boosting models 20 each (random). By default (`TUNE_ON = "G3"`) it tunes once on G3 and
    validates those settings on every set; `TUNE_ON = None` tunes each set separately.
 3. Every fit appends a row to `results/log.csv`, and anything already logged is skipped, so a notebook can be

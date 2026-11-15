@@ -1,8 +1,9 @@
 """Role A: PyTorch MLP on `LinearPipeline` output (Step 10).
 
 Two ReLU hidden layers (hidden, hidden // 2) with dropout, Adam, mini-batches of 2,048 and
-BCEWithLogitsLoss(pos_weight = negatives / positives of the training rows). Training stops
-after `patience` epochs without a better validation PR-AUC; the best epoch's weights are kept.
+BCEWithLogitsLoss(pos_weight = negatives / positives of the training rows). With validation rows,
+training stops after `patience` epochs without a better validation PR-AUC and the best epoch's
+weights are kept; without them it runs exactly `max_epochs` epochs (the refit in src.experiment).
 Runs on CPU so seeded runs are reproducible.
 """
 import numpy as np
@@ -59,15 +60,17 @@ class Model:
 
 
 def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
-    """Train with early stopping on (X_val, y_val) PR-AUC; both are required."""
-    if X_val is None or y_val is None:
-        raise ValueError("The MLP needs X_val and y_val for early stopping")
+    """Train with early stopping on (X_val, y_val) PR-AUC, or for exactly `max_epochs` epochs without them."""
+    if (X_val is None) != (y_val is None):
+        raise ValueError("Supply both X_val and y_val for early stopping")
+    stop_early = X_val is not None
     p = {**DEFAULTS, **(params or {})}
     torch.manual_seed(seed)
     gen = torch.Generator().manual_seed(seed)
-    X, X_val = _tensor(X), _tensor(X_val)
+    X = _tensor(X)
+    X_val = _tensor(X_val) if stop_early else None
     y = torch.from_numpy(np.asarray(y, dtype="float32"))
-    y_val = np.asarray(y_val)
+    y_val = np.asarray(y_val) if stop_early else None
     pos = float(y.sum())
     if pos == 0 or pos == len(y):
         raise ValueError("MLP training requires both classes")
@@ -89,8 +92,11 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
             loss.backward()
             opt.step()
             total += loss.item() * len(idx)
-        pr_auc = average_precision_score(y_val, _scores(net, X_val))
         history["loss"].append(round(total / len(X), 6))
+        if not stop_early:
+            best_epoch = epoch
+            continue
+        pr_auc = average_precision_score(y_val, _scores(net, X_val))
         history["val_pr_auc"].append(round(float(pr_auc), 6))
         if pr_auc > best:
             best, best_epoch, stale = pr_auc, epoch, 0
@@ -99,8 +105,14 @@ def fit(X, y, X_val=None, y_val=None, params=None, seed=0):
             stale += 1
             if stale >= p["patience"]:
                 break
-    net.load_state_dict(best_state)
+    if stop_early:
+        net.load_state_dict(best_state)
     return Model(net, history, best_epoch, pos_weight)
+
+
+def refit_params(model):
+    """The best epoch found by early stopping, as settings for a refit without it."""
+    return {"max_epochs": model.run_metadata["best_epoch"]}
 
 
 def predict_proba(model, X):
