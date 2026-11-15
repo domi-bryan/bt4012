@@ -2,6 +2,10 @@
 
 Benchmark of fraud detection models (logistic regression, random forest, LightGBM, MLP and CatBoost; XGBoost is being added) on the IEEE-CIS Fraud Detection training data. Design decisions are in `Context.md`, the build order is in `BUILD_STEPS.md`, and finished work is logged in `PROGRESS.md`.
 
+Notebooks, in reading order: `01_eda` (exploratory analysis) → `02_feature_engineering` (builds `features_v2`
+and the G0–G3 feature groups) → `03_v_threshold` (chooses the V-column threshold, r = 0.75) → one notebook per
+model (being added) → `11_leakage_check`. Superseded notebooks are in `notebooks/archive/`.
+
 ## 1. Set up the environment
 
 Python 3.13 was used. From the repo root:
@@ -114,9 +118,8 @@ To regenerate only the tables and findings report:
 Tunes C over {0.01, 0.1, 1, 10} with time CV on the train block, refits the best C on the
 whole train block and scores the validation block. Each fold and the validation result
 append a row to `results/log.csv` (about 13 minutes, 1.5 GB peak memory). It refuses to run
-again for the same feature set unless you pass `--force`. Then execute
-`notebooks/02_baseline.ipynb`, which only reads the log and saves
-`reports/figures/baseline_logreg_cv.png`.
+again for the same feature set unless you pass `--force`. The results notebook for
+these runs is archived as `notebooks/archive/02_baseline.ipynb`.
 
 ## 7. Customer ID check (Step 7)
 
@@ -162,13 +165,8 @@ experiments. `config/best_params.yaml` is updated after each cell's tuning compl
 LightGBM's actual best iteration and resolved weight are stored in `params._fit`
 in each log row; validation thresholds remain in `params.threshold`.
 
-After training, regenerate the results notebook and comparison plot:
-
-```bash
-.venv/bin/python -m nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=180 notebooks/03_trees.ipynb
-```
-
-The notebook checks all 27 selected validation runs and the complete CV grid, and
+The results notebook for these runs is archived as `notebooks/archive/03_trees.ipynb` (it is not
+meant to be rerun from there). It checked all 27 selected validation runs and the complete CV grid, and
 generates `reports/figures/trees_validation.png` from the log. The completed Step 9
 results and per-seed runtimes are recorded in `PROGRESS.md`. Results remain
 provisional on the V-column proposal.
@@ -187,8 +185,8 @@ PR-AUC (patience 5, max 40 epochs, best epoch restored). Grid: hidden {128, 256}
 best config is validated with seeds 0, 1 and 2. About 21 minutes and 1.8 GB peak memory.
 Like Step 9 it resumes instead of duplicating rows, and refuses to run if its inputs changed
 since `results/step10_manifest.json` was written. Per-epoch loss and validation PR-AUC are
-stored in each log row's `params._fit`; `notebooks/04_mlp.ipynb` reads them and saves
-`reports/figures/mlp_training_curves.png`.
+stored in each log row's `params._fit`; the archived
+`notebooks/archive/04_mlp.ipynb` read them and saved `reports/figures/mlp_training_curves.png`.
 
 ## 10. CatBoost
 
@@ -238,7 +236,7 @@ stratified 5-fold and StratifiedGroupKFold on uid (seed 0), logging each fold wi
 `cv_scheme` "random" or "group_uid". The time-CV rows for the same configs come from Step 9.
 About 30 minutes and 2 GB peak memory; it resumes rather than duplicating rows and checks
 `results/step12_manifest.json`. `--report` only rebuilds `reports/leakage_check.md` from the
-log. `notebooks/05_leakage.ipynb` reads the log and saves `reports/figures/leakage_check.png`.
+log. `notebooks/11_leakage_check.ipynb` reads the log and saves `reports/figures/leakage_check.png`.
 
 ## 13. Run the tests
 

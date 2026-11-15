@@ -1,6 +1,6 @@
 version: features_v2
 parquet: data/processed/features_v2.parquet
-built_by: notebooks/feature_engineering.ipynb (logic in src/domain_features.py, src/feature_selection.py)
+built_by: notebooks/02_feature_engineering.ipynb (logic in src/domain_features.py, src/feature_selection.py)
 target: isFraud
 not_features:
   TransactionID: row identifier
@@ -1557,6 +1557,6 @@ categorical_cols:
 - fe_card4_card6
 - fe_v_missing_pattern
 notes:
-- 'V columns: pruned at r = 0.75, agreed by the group (notebooks/logreg_v_threshold.ipynb).'
+- 'V columns: pruned at r = 0.75, agreed by the group (notebooks/03_v_threshold.ipynb).'
 - Fit imputers, scalers and encoders in the model notebook on training rows only (inside each CV fold).
 - Test block (last 10% of rows) stays unscored until the experiment freeze.

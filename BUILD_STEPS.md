@@ -146,7 +146,7 @@ Prerequisite: `data/raw/train_transaction.csv` and `data/raw/train_identity.csv`
 
 **Role:** C
 
-**Files:** `src/models/logreg.py`, `notebooks/02_baseline.ipynb`
+**Files:** `src/models/logreg.py`, `notebooks/02_baseline.ipynb` (now `notebooks/archive/`)
 
 **Do**
 
@@ -211,7 +211,7 @@ F1 = F0 + card1 aggregates. F2 = F1 + uid aggregates. Rows with no prior history
 
 **Role:** D
 
-**Files:** `src/models/lgbm.py`, `src/models/rf.py`, `notebooks/03_trees.ipynb`
+**Files:** `src/models/lgbm.py`, `src/models/rf.py`, `notebooks/03_trees.ipynb` (now `notebooks/archive/`)
 
 **Do**
 
@@ -232,7 +232,7 @@ F1 = F0 + card1 aggregates. F2 = F1 + uid aggregates. Rows with no prior history
 
 **Role:** A
 
-**Files:** `src/models/mlp.py`, `notebooks/04_mlp.ipynb`
+**Files:** `src/models/mlp.py`, `notebooks/04_mlp.ipynb` (now `notebooks/archive/`)
 
 **Do**
 
@@ -270,7 +270,7 @@ F1 = F0 + card1 aggregates. F2 = F1 + uid aggregates. Rows with no prior history
 
 **Role:** C
 
-**Files:** `notebooks/05_leakage.ipynb`, `reports/leakage_check.md`
+**Files:** `notebooks/11_leakage_check.ipynb` (was `05_leakage.ipynb`), `reports/leakage_check.md`
 
 **Do**
 
