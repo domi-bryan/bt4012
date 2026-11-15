@@ -129,7 +129,8 @@ Each model has its own notebook: `04_logreg`, `05_random_forest`, `06_lightgbm`,
    `feature_list("G0")` … `("G3")` gives each set's columns.
 2. `src.experiment.tune_and_validate()` tunes the model's settings grid (`GRID` in `src/models/<model>.py`) with
    time CV inside the training block (seed 0), then refits the best settings on the whole training block with
-   seeds 0, 1 and 2 and scores the validation block. By default (`TUNE_ON = "G3"`) it tunes once on G3 and
+   seeds 0, 1 and 2 and scores the validation block. The three boosting models (LightGBM, XGBoost, CatBoost) all
+   use a random 80% of rows and 80% of columns per tree (fixed, not tuned), so they differ only in their algorithms. By default (`TUNE_ON = "G3"`) it tunes once on G3 and
    validates those settings on every set; `TUNE_ON = None` tunes each set separately.
 3. Every fit appends a row to `results/log.csv`, and anything already logged is skipped, so a notebook can be
    stopped and rerun. Validation scores (and, with `SAVE_OOF`, the time-CV fold scores of the chosen settings) are

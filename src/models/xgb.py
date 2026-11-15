@@ -14,6 +14,7 @@ from sklearn.model_selection import ParameterSampler
 NAME = "xgboost"
 DEFAULTS = {
     "n_estimators": 1500, "max_depth": 6, "learning_rate": 0.05, "min_child_weight": 1.0,
+    # 80% of rows and columns per tree, the same as src/models/lgbm.py and catboost.py
     "subsample": 0.8, "colsample_bytree": 0.8, "reg_lambda": 1.0,
     "scale_pos_weight": "balanced", "n_jobs": 6,
 }
@@ -21,7 +22,6 @@ GRID = list(ParameterSampler({
     "max_depth": [4, 6, 8, 10],
     "learning_rate": [0.03, 0.1],
     "min_child_weight": [1.0, 5.0, 20.0],
-    "colsample_bytree": [0.5, 0.8],
     "scale_pos_weight": [1.0, "balanced"],
 }, n_iter=20, random_state=0))
 PATIENCE = 50
