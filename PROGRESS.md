@@ -379,3 +379,9 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
 - Wrote section 7 of `05_random_forest.ipynb` and `09_mlp.ipynb` from the tables in each notebook; no reruns, `results/log.csv` unchanged. Every figure was checked against the notebook outputs and `results/importance/*.csv`.
 - Random forest: G2 scores best (0.5667); G0 → G1 adds 0.0196, G1 → G2 0.0060, G2 → G3 −0.0046. All of the gain goes to known customers (0.6611 on G0 to 0.7288 on G2; unknown 0.5266 to 0.5209). Chosen settings are all at the edge of the grid; class weights were not tuned (limitation).
 - MLP: G1 scores best (0.4404); G1, G2 and G3 are tied within the seed spread. Known customers score lower than unknown ones on every set (0.3940 vs 0.4661 on G3). Unweighted loss and dropout 0.3 each add about 0.01 mean CV PR-AUC.
+
+## CatBoost on G0–G3 (2026-11-15)
+- Ran `08_catboost.ipynb` in full under `es_setup` 2 (about 5 h 20 min on an M5 Pro): 20 settings tuned on G3 with time CV (80 rows in `results/log.csv`), then validated on G0–G3 with seeds 0–2 (12 rows). Chosen: depth 8, `l2_leaf_reg` 3, learning rate 0.03, no class weighting (CV PR-AUC 0.5605).
+- Validation PR-AUC: G0 0.5498, G1 0.5625, G2 0.5504, G3 0.5485. G0 → G1 adds 0.0128; G2 and G3 add nothing. Known customers 0.5912 vs unknown 0.5397 on G3: level with XGBoost on unknown customers, far below it on known ones (likely symmetric trees and no target statistics; untested). Findings written in section 7.
+- Tree cap: 2 of 80 tuning fits and 7 of 12 validation fits stopped within 50 trees of 3,000; stated as a limitation.
+- Permutation importance saved to `results/importance/catboost_G3.csv`. Validation and OOF scores in `results/preds/catboost_*` (gitignored; to be shared on the group drive).
