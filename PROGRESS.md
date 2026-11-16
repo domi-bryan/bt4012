@@ -368,3 +368,9 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
 - Validation PR-AUC: G0 0.6057, G1 0.6495, G2 0.6449, G3 0.6434 (G3 was 0.5615 under the old setup). G0 → G1 adds 0.0437; G2 and G3 add nothing measurable. Known customers 0.8414 vs unknown 0.5369 on G3. Findings rewritten in section 7.
 - Tree cap: no tuning fit reached 3,000 (most 2,607), but 6 of the 12 validation fits stopped within 50 trees of it (2,977 to 2,998). Kept at 3,000 for all boosting models and stated as a limitation in the findings.
 - Permutation importance updated in `results/importance/xgboost_G3.csv`. New validation and OOF scores in `results/preds/xgboost_*` (gitignored; replace the old ones on the group drive).
+
+## CatBoost on G0–G3 (2026-11-15)
+- Ran `08_catboost.ipynb` in full under `es_setup` 2 (about 5 h 20 min on an M5 Pro): 20 settings tuned on G3 with time CV (80 rows in `results/log.csv`), then validated on G0–G3 with seeds 0–2 (12 rows). Chosen: depth 8, `l2_leaf_reg` 3, learning rate 0.03, no class weighting (CV PR-AUC 0.5605).
+- Validation PR-AUC: G0 0.5498, G1 0.5625, G2 0.5504, G3 0.5485. G0 → G1 adds 0.0128; G2 and G3 add nothing. Known customers 0.5912 vs unknown 0.5397 on G3: level with XGBoost on unknown customers, far below it on known ones (likely symmetric trees and no target statistics; untested). Findings written in section 7.
+- Tree cap: 2 of 80 tuning fits and 7 of 12 validation fits stopped within 50 trees of 3,000; stated as a limitation.
+- Permutation importance saved to `results/importance/catboost_G3.csv`. Validation and OOF scores in `results/preds/catboost_*` (gitignored; to be shared on the group drive).
