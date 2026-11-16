@@ -368,3 +368,9 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
 - Validation PR-AUC: G0 0.6057, G1 0.6495, G2 0.6449, G3 0.6434 (G3 was 0.5615 under the old setup). G0 → G1 adds 0.0437; G2 and G3 add nothing measurable. Known customers 0.8414 vs unknown 0.5369 on G3. Findings rewritten in section 7.
 - Tree cap: no tuning fit reached 3,000 (most 2,607), but 6 of the 12 validation fits stopped within 50 trees of it (2,977 to 2,998). Kept at 3,000 for all boosting models and stated as a limitation in the findings.
 - Permutation importance updated in `results/importance/xgboost_G3.csv`. New validation and OOF scores in `results/preds/xgboost_*` (gitignored; replace the old ones on the group drive).
+
+## Random forest and MLP on G0–G3 (2026-11-15)
+- Ran `05_random_forest.ipynb` in full: 12 settings tuned on G3 with time CV (48 rows in `results/log.csv`), then validated on G0–G3 with seeds 0–2 (12 rows). Chosen: unlimited depth, minimum leaf 5, `max_features` 0.3 (CV PR-AUC 0.5847). Validation PR-AUC: G0 0.5411, G1 0.5607, G2 0.5667, G3 0.5620. Unaffected by the early-stopping refit (random forest trains on the whole block).
+- Ran `09_mlp.ipynb` in full on the refit setup (`es_setup` 2, `pos_weight` in the search): 16 settings tuned on G3 (64 rows), validated on G0–G3 with seeds 0–2 (12 rows). Chosen: 2 layers, hidden 128, dropout 0.3, learning rate 0.0003, weight decay 1e-5, unweighted loss (CV PR-AUC 0.4492). Validation PR-AUC: G0 0.4237, G1 0.4404, G2 0.4360, G3 0.4379.
+- An earlier MLP run on the older setup (64 tuning and 12 validation rows, before `pos_weight` and the refit) stays in the log and is left out of the summaries by `experiment.current_runs`.
+- Permutation and built-in importance saved to `results/importance/rf_G3.csv` and `mlp_G3.csv`. Validation and OOF scores in `results/preds/rf_*` and `mlp_*` (gitignored; to be shared on the group drive). Findings cells (section 7) not yet written.
