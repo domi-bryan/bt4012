@@ -374,3 +374,8 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
 - Ran `09_mlp.ipynb` in full on the refit setup (`es_setup` 2, `pos_weight` in the search): 16 settings tuned on G3 (64 rows), validated on G0–G3 with seeds 0–2 (12 rows). Chosen: 2 layers, hidden 128, dropout 0.3, learning rate 0.0003, weight decay 1e-5, unweighted loss (CV PR-AUC 0.4492). Validation PR-AUC: G0 0.4237, G1 0.4404, G2 0.4360, G3 0.4379.
 - An earlier MLP run on the older setup (64 tuning and 12 validation rows, before `pos_weight` and the refit) stays in the log and is left out of the summaries by `experiment.current_runs`.
 - Permutation and built-in importance saved to `results/importance/rf_G3.csv` and `mlp_G3.csv`. Validation and OOF scores in `results/preds/rf_*` and `mlp_*` (gitignored; to be shared on the group drive). Findings cells (section 7) not yet written.
+
+## Findings for random forest and MLP (2026-11-16)
+- Wrote section 7 of `05_random_forest.ipynb` and `09_mlp.ipynb` from the tables in each notebook; no reruns, `results/log.csv` unchanged. Every figure was checked against the notebook outputs and `results/importance/*.csv`.
+- Random forest: G2 scores best (0.5667); G0 → G1 adds 0.0196, G1 → G2 0.0060, G2 → G3 −0.0046. All of the gain goes to known customers (0.6611 on G0 to 0.7288 on G2; unknown 0.5266 to 0.5209). Chosen settings are all at the edge of the grid; class weights were not tuned (limitation).
+- MLP: G1 scores best (0.4404); G1, G2 and G3 are tied within the seed spread. Known customers score lower than unknown ones on every set (0.3940 vs 0.4661 on G3). Unweighted loss and dropout 0.3 each add about 0.01 mean CV PR-AUC.
