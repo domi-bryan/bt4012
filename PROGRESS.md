@@ -363,6 +363,29 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
 - Notebooks: model input and tune-and-validate text in 06–09 describe the two-step fit and the new cap; 07's findings reset to the template until it is rerun; `02_feature_engineering`'s stale note about early stopping on the validation block corrected.
 - Checks: 4 new tests (MLP class weight is a setting; refit trains on the whole block with the stopping point from step 1 and logs it; refit settings fix the tree count for LightGBM, CatBoost and XGBoost and the MLP's epochs; older-setup rows are rerun, OOF recomputed and left out of the summaries while logistic regression rows stay); 2 tests updated; full suite 121 passed. On every 20th row of the real features, a 2-setting XGBoost run logged `es_setup` 2, refit with the step-1 tree count, and `fit_final` reproduced its validation PR-AUC exactly; `results/log.csv` unchanged.
 
+## XGBoost rerun with the refit and the 3,000-tree cap (2026-11-15)
+- Reran `07_xgboost.ipynb` in full under `es_setup` 2: 80 tuning rows and 12 validation rows added to `results/log.csv` (the 92 older-setup rows stay but are left out of the summaries). Chosen: learning rate 0.03, depth 10, min child weight 1, `reg_lambda` 10, balanced class weight (CV PR-AUC 0.5819).
+- Validation PR-AUC: G0 0.6057, G1 0.6495, G2 0.6449, G3 0.6434 (G3 was 0.5615 under the old setup). G0 → G1 adds 0.0437; G2 and G3 add nothing measurable. Known customers 0.8414 vs unknown 0.5369 on G3. Findings rewritten in section 7.
+- Tree cap: no tuning fit reached 3,000 (most 2,607), but 6 of the 12 validation fits stopped within 50 trees of it (2,977 to 2,998). Kept at 3,000 for all boosting models and stated as a limitation in the findings.
+- Permutation importance updated in `results/importance/xgboost_G3.csv`. New validation and OOF scores in `results/preds/xgboost_*` (gitignored; replace the old ones on the group drive).
+
+## Random forest and MLP on G0–G3 (2026-11-15)
+- Ran `05_random_forest.ipynb` in full: 12 settings tuned on G3 with time CV (48 rows in `results/log.csv`), then validated on G0–G3 with seeds 0–2 (12 rows). Chosen: unlimited depth, minimum leaf 5, `max_features` 0.3 (CV PR-AUC 0.5847). Validation PR-AUC: G0 0.5411, G1 0.5607, G2 0.5667, G3 0.5620. Unaffected by the early-stopping refit (random forest trains on the whole block).
+- Ran `09_mlp.ipynb` in full on the refit setup (`es_setup` 2, `pos_weight` in the search): 16 settings tuned on G3 (64 rows), validated on G0–G3 with seeds 0–2 (12 rows). Chosen: 2 layers, hidden 128, dropout 0.3, learning rate 0.0003, weight decay 1e-5, unweighted loss (CV PR-AUC 0.4492). Validation PR-AUC: G0 0.4237, G1 0.4404, G2 0.4360, G3 0.4379.
+- An earlier MLP run on the older setup (64 tuning and 12 validation rows, before `pos_weight` and the refit) stays in the log and is left out of the summaries by `experiment.current_runs`.
+- Permutation and built-in importance saved to `results/importance/rf_G3.csv` and `mlp_G3.csv`. Validation and OOF scores in `results/preds/rf_*` and `mlp_*` (gitignored; to be shared on the group drive). Findings cells (section 7) not yet written.
+
+## Findings for random forest and MLP (2026-11-16)
+- Wrote section 7 of `05_random_forest.ipynb` and `09_mlp.ipynb` from the tables in each notebook; no reruns, `results/log.csv` unchanged. Every figure was checked against the notebook outputs and `results/importance/*.csv`.
+- Random forest: G2 scores best (0.5667); G0 → G1 adds 0.0196, G1 → G2 0.0060, G2 → G3 −0.0046. All of the gain goes to known customers (0.6611 on G0 to 0.7288 on G2; unknown 0.5266 to 0.5209). Chosen settings are all at the edge of the grid; class weights were not tuned (limitation).
+- MLP: G1 scores best (0.4404); G1, G2 and G3 are tied within the seed spread. Known customers score lower than unknown ones on every set (0.3940 vs 0.4661 on G3). Unweighted loss and dropout 0.3 each add about 0.01 mean CV PR-AUC.
+
+## CatBoost on G0–G3 (2026-11-15)
+- Ran `08_catboost.ipynb` in full under `es_setup` 2 (about 5 h 20 min on an M5 Pro): 20 settings tuned on G3 with time CV (80 rows in `results/log.csv`), then validated on G0–G3 with seeds 0–2 (12 rows). Chosen: depth 8, `l2_leaf_reg` 3, learning rate 0.03, no class weighting (CV PR-AUC 0.5605).
+- Validation PR-AUC: G0 0.5498, G1 0.5625, G2 0.5504, G3 0.5485. G0 → G1 adds 0.0128; G2 and G3 add nothing. Known customers 0.5912 vs unknown 0.5397 on G3: level with XGBoost on unknown customers, far below it on known ones (likely symmetric trees and no target statistics; untested). Findings written in section 7.
+- Tree cap: 2 of 80 tuning fits and 7 of 12 validation fits stopped within 50 trees of 3,000; stated as a limitation.
+- Permutation importance saved to `results/importance/catboost_G3.csv`. Validation and OOF scores in `results/preds/catboost_*` (gitignored; to be shared on the group drive).
+
 ## LightGBM on G0–G3 (2026-11-16)
 - Ran `notebooks/06_lightgbm.ipynb` in full on branch `results-lightgbm`, based on `62087b8` (the merged early-stopping/refit update). Settings were unchanged: 20 configurations tuned on G3 with four time-CV folds, then validation on G0–G3 with seeds 0, 1 and 2. The run uses `es_setup=2`, a 3,000-tree cap and the full-training refit after the stopping point is chosen inside training.
 - Checks: all 20 configurations have folds 1–4 exactly once (80 CV rows); every validation set has seeds 0–2 exactly once (12 validation rows); all 13 notebook code cells executed with no saved errors. All 16 prediction files exist: 12 validation files with 59,054 rows each and four OOF files with 338,093 rows each. `results/importance/lgbm_G3.csv` contains all 252 G3 inputs. No test rows have been logged.
