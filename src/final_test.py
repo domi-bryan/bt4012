@@ -14,7 +14,7 @@ stopped and restarted. One model per process (macOS: the model libraries' OpenMP
 
     .venv/bin/python -u -m src.final_test --model catboost --freeze-confirmed
     .venv/bin/python -u -m src.final_test --blend --freeze-confirmed   # after the four G3 input models
-    .venv/bin/python -m src.final_test --report        # rebuild reports/test_results.md from the log
+    .venv/bin/python -m src.final_test --report        # once all test rows are merged: reports/test_results.md
 
 The segment blend (`src.ensemble`, fixed before the freeze) needs no training: `--blend` combines the saved G3
 test scores of XGBoost, LightGBM, CatBoost and random forest and applies the threshold from its validation row.
@@ -232,12 +232,13 @@ def main():
         return
     if args.blend:
         run_blend(freeze_confirmed=args.freeze_confirmed)
-        print(f"wrote {write_report()}")
-        return
-    if not args.model:
-        ap.error("--model is required unless --report is given")
-    run(args.model, freeze_confirmed=args.freeze_confirmed)
-    print(f"wrote {write_report()}")
+    elif args.model:
+        run(args.model, freeze_confirmed=args.freeze_confirmed)
+    else:
+        ap.error("give --model, --blend or --report")
+    # The report is written only by --report, once all test rows are merged: a report written after one
+    # person's run would show only their models and conflict with everyone else's.
+    print("done; commit only results/log.csv. Once all test rows are merged: python -m src.final_test --report")
 
 
 if __name__ == "__main__":
