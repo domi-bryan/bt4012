@@ -166,3 +166,21 @@ def test_loader_with_test_block():
     assert df["TransactionDT"].is_monotonic_increasing
     base, tr2, va2 = fs.load_features(spec)
     assert len(base) == te[0] and np.array_equal(tr, tr2) and np.array_equal(va, va2)
+
+
+def test_runs_do_not_write_the_report(tmp_path, monkeypatch):
+    """Only --report writes reports/test_results.md; a model or blend run must leave it alone."""
+    calls = []
+    monkeypatch.setattr(final_test, "write_report", lambda *a, **k: calls.append("report"))
+    monkeypatch.setattr(final_test, "run", lambda name, freeze_confirmed=False: calls.append(("run", name)))
+    monkeypatch.setattr(final_test, "run_blend", lambda freeze_confirmed=False: calls.append("blend"))
+    for argv in (["--model", "rf", "--freeze-confirmed"], ["--blend", "--freeze-confirmed"]):
+        monkeypatch.setattr("sys.argv", ["final_test", *argv])
+        final_test.main()
+    assert calls == [("run", "rf"), "blend"]
+    monkeypatch.setattr("sys.argv", ["final_test", "--report"])
+    final_test.main()
+    assert calls[-1] == "report"
+    monkeypatch.setattr("sys.argv", ["final_test"])
+    with pytest.raises(SystemExit):
+        final_test.main()
