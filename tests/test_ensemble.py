@@ -75,3 +75,86 @@ def test_load_scores_checks_rows(tmp_path):
     a.assign(isFraud=[1, 1, 0]).to_parquet(tmp_path / "m4_G3_val_seed0.parquet")
     with pytest.raises(ValueError, match="isFraud"):
         ensemble.load_scores(tmp_path, ["m1", "m4"], "G3", "val", seed=0)
+
+
+# --- the adopted segment blend: validation and test rows from saved scores --------------------------
+
+@pytest.fixture
+def blend_inputs(tmp_path):
+    """Saved val and test scores of the four input models (seeds 0, 1) and matching log rows."""
+    import json
+    from sklearn.metrics import average_precision_score as ap
+    from src import results
+    rng = np.random.default_rng(1)
+    preds, log = tmp_path / "preds", tmp_path / "log.csv"
+    preds.mkdir()
+    uid = {}
+    for split, start in (("val", 1000), ("test", 2000)):
+        ids = np.arange(start, start + 600)
+        y = (rng.random(600) < 0.1).astype(int)
+        for i in ids:
+            uid[i] = f"u{i % 80}"
+        for seed in (0, 1):
+            for m in ensemble.BLEND_MODELS:
+                s = y * rng.random() + rng.normal(size=600)
+                pd.DataFrame({"TransactionID": ids, "isFraud": y, "score": s}).to_parquet(
+                    preds / f"{m}_G3_{split}_seed{seed}.parquet")
+                results.log_run(log, model=m, feature_set="G3", cv_scheme="holdout", split=split, seed=seed,
+                                params=json.dumps({"threshold": 0.5}), pr_auc=ap(y, s))
+    uid_by_id = pd.Series(uid)
+    train_uids = {f"u{i}" for i in range(40)}           # half the customers are "known"
+    return log, preds, uid_by_id, train_uids
+
+
+def test_blend_weights_are_fixed():
+    assert sum(ensemble.BLEND_KNOWN.values()) == pytest.approx(1)
+    assert sum(ensemble.BLEND_UNKNOWN.values()) == pytest.approx(1)
+    assert ensemble.BLEND_KNOWN == {"xgboost": 1.0}
+    assert ensemble.BLEND_UNKNOWN == {"catboost": 0.6, "lgbm": 0.2, "xgboost": 0.1, "rf": 0.1}
+
+
+def test_blend_validation_rows(blend_inputs):
+    import json
+    from src.metrics import pick_threshold
+    log, preds, uid_by_id, train_uids = blend_inputs
+    ensemble.log_blend("val", uid_by_id, train_uids, seeds=(0, 1), log_path=log, preds_dir=preds)
+    rows = pd.read_csv(log).query("model == 'segment_blend'")
+    assert len(rows) == 2 and set(rows.split) == {"val"} and set(rows.feature_set) == {"G3"}
+    for r in rows.itertuples():
+        t, s = ensemble.blend_scores(preds, "val", r.seed, uid_by_id, train_uids)
+        p = json.loads(r.params)
+        assert p["threshold"] == pytest.approx(pick_threshold(t["isFraud"], s))
+        assert p["known"] == ensemble.BLEND_KNOWN and p["unknown"] == ensemble.BLEND_UNKNOWN
+        saved = pd.read_parquet(ensemble.blend_preds_path(preds, "val", r.seed))
+        from sklearn.metrics import average_precision_score as ap
+        assert ap(saved["isFraud"], saved["score"]) == pytest.approx(r.pr_auc)
+    ensemble.log_blend("val", uid_by_id, train_uids, seeds=(0, 1), log_path=log, preds_dir=preds)
+    assert (pd.read_csv(log).model == "segment_blend").sum() == 2          # rerun adds nothing
+
+
+def test_blend_inputs_must_match_the_log(blend_inputs):
+    log, preds, uid_by_id, train_uids = blend_inputs
+    p = preds / "catboost_G3_val_seed0.parquet"
+    pd.read_parquet(p).assign(score=lambda d: d["score"][::-1].to_numpy()).to_parquet(p)
+    with pytest.raises(ValueError, match="does not reproduce"):
+        ensemble.log_blend("val", uid_by_id, train_uids, seeds=(0,), log_path=log, preds_dir=preds)
+    assert not (pd.read_csv(log).model == "segment_blend").any()
+
+
+def test_blend_test_rows_use_the_stored_threshold(blend_inputs):
+    import json
+    from src import final_test
+    log, preds, uid_by_id, train_uids = blend_inputs
+    with pytest.raises(PermissionError, match="freeze"):
+        final_test.run_blend(seeds=(0, 1), log_path=log, preds_dir=preds, lookup=(uid_by_id, train_uids))
+    with pytest.raises(ValueError, match="no validation row"):
+        final_test.run_blend(True, seeds=(0,), log_path=log, preds_dir=preds, lookup=(uid_by_id, train_uids))
+    ensemble.log_blend("val", uid_by_id, train_uids, seeds=(0, 1), log_path=log, preds_dir=preds)
+    final_test.run_blend(True, seeds=(0, 1), log_path=log, preds_dir=preds, lookup=(uid_by_id, train_uids))
+    rows = pd.read_csv(log).query("model == 'segment_blend'")
+    val, test = rows[rows.split == "val"], rows[rows.split == "test"]
+    assert len(test) == 2
+    for r in test.itertuples():
+        v = val[val.seed == r.seed].iloc[0]
+        assert json.loads(r.params)["threshold"] == json.loads(v.params)["threshold"]
+    assert "Segment blend (G3)" in final_test.render(pd.read_csv(log))

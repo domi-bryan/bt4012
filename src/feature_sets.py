@@ -49,3 +49,19 @@ def load_features(spec=None, path=None):
         raise ValueError("Training block size differs from the one the features were built with")
     df = df.iloc[:val_idx[-1] + 1].copy()
     return df, train_idx, val_idx
+
+
+def load_features_with_test(spec=None, path=None):
+    """(df, train_idx, val_idx, test_idx): the whole features_v2 table, test block included.
+
+    For the final test scoring only (Step 19, `src.final_test`), after the experiment freeze. Every
+    other part of the project uses `load_features()`, which never returns test rows.
+    """
+    spec = spec or load_spec()
+    df = pd.read_parquet(path or ROOT / spec["parquet"])
+    if not df["TransactionDT"].is_monotonic_increasing:
+        raise ValueError("features_v2 must stay in time order")
+    train_idx, val_idx, test_idx = holdout_indices(df)
+    if len(train_idx) != spec["train_block_rows"]:
+        raise ValueError("Training block size differs from the one the features were built with")
+    return df, train_idx, val_idx, test_idx
