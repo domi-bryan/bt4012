@@ -2,6 +2,8 @@
 
 Read this before working on any part of the project. It records what the group decided and why, so code and report text stay consistent with the approved proposal and the TA's feedback.
 
+Updated 2026-11-17 for the `features_v2` table, its G0–G3 feature sets and six models. The earlier plan (feature sets F0–F2, four models) was run as a first pass in October; it is recorded in `PROGRESS.md` and Part 2 of `BUILD_STEPS.md`.
+
 ## Project
 
 - **Course:** BT4012 Fraud Analytics (NUS).
@@ -10,6 +12,7 @@ Read this before working on any part of the project. It records what the group d
 - **Proposal:** https://docs.google.com/document/d/1tngV5MgwvL5uSp1BHHHMvFMtiYPxHm8grSQRcmBYr9c
 - **Plan (Google Doc):** https://docs.google.com/document/d/1BnIaWixwG8-rUpJF8Vu6WKsmWJPDfN8-MOt4_7Yct54
 - **Deliverables:** final report and a GitHub repo with code, seeds and a reproduction README.
+- **Report due:** 20 Nov 2026.
 
 ## Research questions
 
@@ -34,19 +37,19 @@ Facts that shape the work:
 - card1 has about 13,553 distinct values and acts as a coarse card fingerprint.
 - D1 is days since a card-related event. Transaction day minus D1 gives an approximate account-open day that is stable within a customer.
 - Vesta labels later transactions linked to a charged-back card's account, email or address as fraud too, so fraud clusters by customer. This is the root of the **leakage** risk below.
-- Full table is roughly 590k x 430 columns. Downcast to float32 to fit in Colab or Kaggle RAM.
+- The joined table is 590,540 x 436. Numbers are stored as float32 and text as `category`.
 
-## Locked decisions (from TA feedback)
+## Locked decisions
 
-The TA approved the topic, dataset and methodology, then asked for three fixes. These are settled; change them only with the group's agreement.
+The TA approved the topic, dataset and methodology, then asked for three fixes (split, leakage, models). The group has since settled the feature sets, the tuning rules and the items marked "confirmed 2026-11-17". Change any of these only with the group's agreement.
 
 ### Split
 
 Chronological 80/10/10, sorted by TransactionDT:
 
-- **Train:** first 80%. Hyperparameter tuning uses expanding-window CV inside it (monthly chunks, train on months 1..k, validate on k+1, about 4 folds).
-- **Validation:** next 10%. Used for early stopping, threshold choice and model selection.
-- **Test:** last 10%. Scored once, after the experiment freeze.
+- **Train:** first 80% (472,432 rows). Hyperparameter tuning uses expanding-window CV inside it (30-day bins, train on bins 1..k, validate on bin k+1, 4 folds).
+- **Validation:** next 10% (59,054 rows). Used for threshold choice and for comparing models and feature sets.
+- **Test:** last 10% (59,054 rows). Scored once, after the experiment freeze.
 
 Random K-fold is a comparison in the leakage check only, never the main scheme.
 
@@ -54,93 +57,122 @@ Random K-fold is a comparison in the leakage check only, never the main scheme.
 
 Every feature and every fold must use only information available at transaction time.
 
-- Aggregates are computed from **prior** transactions only.
-- No target encoding of card1 or uid.
+- History features are computed from **prior** transactions only.
+- No target encoding of card1 or uid. uid is a grouping key and is never a model input.
+- Every fitted transform (imputer, scaler, encoder, V-column pruning) is fit on training rows only, and refit on each fold's training part.
 - Resampling and class weighting apply inside a fold's training part only. Validation and test keep the true 3.5% fraud rate.
-- **Leakage check (report table):** run LR and LightGBM on the same features under random stratified K-fold, StratifiedGroupKFold on uid, and time-ordered CV. Report PR-AUC for each. Random K-fold is expected to score highest because the model recognises customers it has already seen.
-- On the test block, report PR-AUC separately for returning customers (uid seen in train) and new customers.
+- Early stopping uses rows held out of the training part, never the rows a model is scored on (see Tuning and fitting).
+- **Leakage check (report table):** run LR and LightGBM on G3 with their chosen settings under random stratified K-fold, StratifiedGroupKFold on uid, and time-ordered CV. Report PR-AUC for each. Random K-fold is expected to score highest because the model recognises customers it has already seen. (On G3: confirmed 2026-11-17. The first-pass check on F2 is not used in the report.)
+- **Known vs unknown customers:** report PR-AUC separately for known customers (uid seen in the train block) and unknown ones, on the validation block and on the test block. (Definition for the test block confirmed 2026-11-17.)
 
 ### Models
 
-| Model | Role | Input prep |
+| Model | Kind | Input prep |
 | --- | --- | --- |
-| Logistic regression | Baseline | Imputation, missing flags, scaling, encoded categoricals, class weights |
-| Random Forest | Bagged trees | Imputation or sentinel values, class weights |
-| LightGBM | Boosted trees, expected strongest | Native NaN and categoricals; scale_pos_weight |
-| MLP | Deep learning (Lecture 4) | Same prep as LR; dropout, weighted BCE loss |
+| Logistic regression | Baseline | Median imputation, missing flags, scaling, one-hot or frequency-encoded categoricals; balanced class weights |
+| Random Forest | Bagged trees | Missing values as -999, categoricals as integer codes; balanced class weights |
+| LightGBM | Boosted trees | Native NaN and categoricals |
+| XGBoost | Boosted trees | Native NaN and categoricals |
+| CatBoost | Boosted trees | Native NaN; built-in one-hot encoding only, no target statistics |
+| MLP | Deep learning (Lecture 4) | Same prep as LR; dropout and weight decay |
 
-XGBoost or CatBoost are optional extras.
+All six are full members of the benchmark. Every model gets the same input columns for a given feature set; only the representation differs.
 
 ### Feature sets
 
-- **F0 Raw:** cleaned transaction and identity columns.
-- **F1 Card:** F0 + aggregates grouped by card1.
-- **F2 Customer:** F1 + the same aggregates grouped by uid.
+Four cumulative sets from `data/processed/features_v2.parquet`, defined in `config/features_v2.yaml`:
 
-**uid** = card1 + addr1 + floor(transaction day − D1). It is approximate; validate it (group count, group size distribution, fraud rate per group) before relying on it.
+| Set | Adds | Inputs | Question it answers |
+| --- | --- | --- | --- |
+| **G0 Raw** | Raw transaction and identity columns | 197 | Starting point |
+| **G1 Row-level** | 27 features built from the transaction's own values | 224 | Does engineering a single transaction help? |
+| **G2 Card and device history** | 10 past-only counts over the card, device and other values | 234 | Does knowing how common a value is help? |
+| **G3 Customer history** | 18 past-only features over uid | 252 | Does a customer profile help? (RQ3) |
 
-Aggregates: transaction count, amount mean and std, amount relative to group mean, seconds since previous transaction, counts in trailing windows, distinct devices, emails and addresses.
+- **uid** = card1 + addr1 + floor(transaction day − D1). It is approximate; `reports/uid_check.md` validates it.
+- **Raw inputs:** identifiers, raw time, uid, `id_12` and `id_27` are excluded, along with raw columns whose link to fraud reversed or faded over time.
+- **V columns:** within each group of V columns that go missing together, drop a column if |Pearson r| > 0.75 with one already kept. The threshold was chosen in `notebooks/03_v_threshold.ipynb` and replaces the first proposal of 0.9.
+- **Engineered features** are kept only if the EDA supports them and their link to fraud holds between the first and last 30 days of the train block.
 
-The core experiment is a **4 models x 3 feature sets grid** (12 cells). RQ3 is answered by comparing the gain from LR to LightGBM against the gain from F0 to F2.
+The core experiment is a **6 models x 4 feature sets grid** (24 cells) on the validation block. RQ3 is answered by comparing the gain between models against the gain from G0 to G3, with G2 → G3 as the customer-profile step.
+
+The report uses G0–G3 results only (confirmed 2026-11-17).
+
+### Tuning and fitting
+
+- Each model's settings are tuned once, on G3, with time CV and seed 0. The settings with the highest mean PR-AUC are then held fixed and validated on every set, so the sets are compared with the model unchanged.
+- Search budgets: LR 11 values of C (grid), RF 12 settings (grid), MLP 16 (random search), LightGBM, XGBoost and CatBoost 20 each (random search).
+- The three boosting models are kept on equal terms: 80% of rows and 80% of columns per tree, L2 on leaf weights tuned over {1, 3, 10}, at most 3,000 trees, early-stopping patience 50.
+- Class weighting is tuned (unweighted or balanced) for the boosting models and the MLP. LR and RF always use balanced weights; state this as a limitation.
+- Early stopping (boosting models and MLP): a tuning fit trains on the first 90% (by time) of its training part and stops on the last 10%. Validation and test fits then refit on the whole training part with the stopping point found.
+- Validated models are fit on the train block with seeds 0, 1, 2. The decision threshold (best F1) is picked on the validation block and reused on the test block.
 
 ### Metrics
 
 - **Primary:** PR-AUC (no-skill baseline = 0.035).
-- **Also:** AUROC, precision and recall at the validation-chosen threshold, recall in the top 1% of scores.
-- Stochastic models run on seeds 0, 1, 2; report mean and std.
+- **Also:** AUROC, precision and recall at the validation-chosen threshold, recall and precision in the top 1% of scores.
+- Known vs unknown customer PR-AUC comes with 95% bootstrap intervals.
+- Report mean and sample standard deviation over seeds 0, 1, 2.
 
-### RQ4 sweeps
+### RQ4: effect of the settings
 
-One parameter at a time around each tuned model, PR-AUC on validation:
+Read from the tuning runs, with no extra training: for each tuned setting and value, the mean, best and worst time-CV PR-AUC (section 5.5 of each model notebook). There are no separate one-at-a-time sweeps (confirmed 2026-11-17).
 
-- LightGBM: num_leaves, learning_rate, min_child_samples, scale_pos_weight
-- LR: C
-- RF: max_depth, n_estimators
-- MLP: hidden size, dropout, learning rate
+State the caveat in the report: LR and RF use full grids, so their values are compared on equal terms. The other four models use random search, so each value is paired with a different mix of other settings and the comparison is indicative.
+
+### RQ1: feature importance
+
+Permutation importance (drop in validation PR-AUC when one input column is shuffled), which means the same thing for every model, plus each model's built-in measure where it has one. SHAP is not used (confirmed 2026-11-17).
 
 ## Repo layout and interfaces
 
 ```
-data/            raw CSVs (gitignored), processed parquet
-src/data.py      Role A: load, join, clean, tree-ready and linear-ready pipelines
-src/features.py  Role B: uid, F0/F1/F2 builders
-src/split.py     Role C: holdout indices, CV fold generators
-src/metrics.py   Role C: evaluate(y_true, y_score) -> dict
-src/models/      one file per model
-notebooks/       EDA and plots only; shared logic lives in src/
-results/log.csv  one row appended per run
+data/                    raw CSVs (gitignored), processed parquet
+config/features_v2.yaml  G0-G3 column lists, exclusions, train-block constants
+src/data.py              load, join, clean, tree-ready and linear-ready pipelines
+src/domain_features.py   uid and the engineered fe_ columns
+src/feature_selection.py V-column pruning, time-stability check
+src/feature_sets.py      load_features() (test block removed), feature_list("G0".."G3")
+src/split.py             holdout indices, CV fold generators
+src/metrics.py           evaluate(y_true, y_score) -> dict
+src/experiment.py        tune_and_validate, fit_final, current_runs, setting_sensitivity
+src/segments.py          known vs unknown customers, bootstrap intervals
+src/importance.py        permutation and built-in importance
+src/models/              one file per model
+notebooks/               01 EDA, 02 features, 03 V threshold, 04-09 one per model,
+                         10 comparison, 11 leakage check; shared logic lives in src/
+results/log.csv          one row appended per run
 ```
 
 - `split.py` returns row indices, so every model trains and scores on identical rows.
-- Every model module exposes `fit(X, y, X_val, y_val, params)` and `predict_proba(X)`.
+- Every model module exposes `NAME`, `DEFAULTS`, `GRID`, `fit(X, y, X_val, y_val, params, seed)`, `predict_proba(model, X)` and `feature_importance(model, columns)`. Models that early-stop also set `EARLY_STOPPING` and expose `refit_params(model)`.
 - `evaluate()` returns the metrics listed above.
-- `results/log.csv` columns: date, author, model, feature_set, cv_scheme, split (cv/val/test), seed, params (JSON), pr_auc, auroc, precision, recall, recall_top1pct, runtime_s.
+- `results/log.csv` columns: date, author, model, feature_set, cv_scheme, split (cv/val/test), seed, params (JSON), pr_auc, auroc, precision, recall, recall_top1pct, runtime_s. The fold, the threshold and fit details sit inside `params`.
+- Summaries read the log through `experiment.current_runs`, which leaves out early-stopping runs from before the refit rule.
 
 ## Roles
 
 | Role | Owns | Report sections |
 | --- | --- | --- |
-| A: Data pipeline + MLP | Join, cleaning, missingness, V-column pruning, both pipelines, MLP, README | Dataset, Preprocessing, MLP; final edit |
-| B: EDA + features | RQ1 EDA, uid, F1/F2 aggregates, feature dictionary, SHAP | EDA, Feature engineering, RQ1 |
-| C: Validation + baseline | split.py, metrics.py, results log, LR, leakage check, returning vs new analysis, results tables | Experimental setup, Results |
-| D: Tree models + tuning | RF, LightGBM, tuning, RQ4 sweeps | Models, RQ4 |
+| A: Data pipeline + MLP | Join, cleaning, missingness, V-column threshold, both pipelines, MLP, README | Dataset, Preprocessing, MLP; final edit |
+| B: EDA + features | RQ1 EDA, uid, `features_v2` and the G0–G3 sets, feature dictionary, feature importance | EDA, Feature engineering, RQ1 |
+| C: Validation + baseline | split.py, metrics.py, results log, shared run code, LR, model comparison, leakage check, known vs unknown analysis, test scoring | Experimental setup, Results |
+| D: Tree models + tuning | RF, LightGBM, RQ4 settings analysis | Models, RQ4 |
+
+XGBoost and CatBoost were added after the roles were drawn and have no role yet (see Open questions).
 
 Discussion of RQ2 and RQ3, limitations and conclusion are written together.
 
 ## Timeline
 
-Assumes the report is due about 13 Nov 2026; confirm the real deadline.
-
 | Dates | Milestone |
 | --- | --- |
-| Oct 1-7 | Kickoff, repo, interfaces agreed |
-| Oct 10 | split.py, metrics.py, LR on F0 ready (C) |
-| Oct 14 | Clean data and pipelines ready (A); EDA and uid done (B) |
-| Oct 21 | F1/F2 feature tables ready (B); RF and LightGBM on F0 done (D) |
-| Oct 22 - Nov 4 | Full grid, leakage check, tuning, RQ4 sweeps, MLP, SHAP |
-| Nov 4 | Experiment freeze; test block scored |
-| Nov 5-11 | Write and review |
-| ~Nov 13 | Report due |
+| Oct 1-4 | Repo, data load and join, data profile, audit, cleaning, EDA |
+| Oct 18-22 | First pass on F0–F2: splits, metrics, pipelines, four models, leakage check |
+| Nov 14 | Move to `features_v2`, G0–G3 and six models; shared run code and model notebooks |
+| Nov 15-16 | Model runs on G0–G3 |
+| Nov 17-20 | Remaining build steps: logistic regression write-up, model comparison, leakage check on G3, experiment freeze, test scoring. Write and review. |
+| Nov 20 | Report due |
 
 ## Report requirements
 
@@ -148,7 +180,7 @@ The TA asked for detail and justification in every section. Each section states 
 
 - Dataset: why Vesta, size, variables, table structure, partial identity coverage.
 - Preprocessing: each step and its reason, per model family.
-- Features: what each aggregate captures and how leakage is prevented.
+- Features: what each engineered feature captures and how leakage is prevented.
 - Experimental setup: the chronological split, why random K-fold misleads here, why PR-AUC leads.
 - Models: why each suits imbalanced tabular fraud data.
 
@@ -156,8 +188,13 @@ Fix in proposal wording: "train/validation/split" should read "train/validation/
 
 ## Open questions
 
-- Actual report deadline.
-- Who takes Roles A to D.
-- Where compute runs (Colab, Kaggle, or a 16 GB+ machine).
-- Whether RQ3's "user profile" means the uid aggregates in F2 (current assumption: yes).
-- Weekly check-in time and where the results log lives.
+- Date of the experiment freeze. It has to leave time for test scoring and writing before 20 Nov.
+- Who takes Roles A to D, and who writes up XGBoost and CatBoost.
+- Whether to build an ensemble from the saved fold scores. No build step covers one.
+
+Settled since the first version of this file:
+
+- Report deadline: 20 Nov 2026.
+- RQ3's "user profile" means the customer history features that G3 adds to G2.
+- The results log is `results/log.csv` in the repo, shared by all members.
+- Compute runs on members' own machines.
