@@ -378,7 +378,8 @@ def run_summary(model_name, feature_sets, log_path=LOG_PATH, sizes=None):
     recall (precision = recall * fraud rows / rows flagged), so past runs need no refit.
     """
     log = current_runs(pd.read_csv(log_path))
-    log = log[(log["model"] == model_name) & (log["feature_set"].isin(list(feature_sets)))].copy()
+    log = log[(log["model"] == model_name) & (log["feature_set"].isin(list(feature_sets)))
+              & ((log["split"] != "cv") | (log["cv_scheme"] == "time"))].copy()   # not the leakage-check folds
     params = log["params"].map(json.loads)
     log["settings"] = params.map(lambda d: json.dumps(
         {k: v for k, v in d.items() if k not in NOT_SETTINGS}, sort_keys=True))
@@ -392,7 +393,7 @@ def run_summary(model_name, feature_sets, log_path=LOG_PATH, sizes=None):
         log["precision_top1pct"] = log.apply(prec, axis=1) if len(log) else []
     top = ["recall_top1pct"] + (["precision_top1pct"] if sizes is not None else [])
 
-    cv = log[(log["split"] == "cv") & (log["cv_scheme"] == "time")]      # tuning folds only, not the leakage check
+    cv = log[log["split"] == "cv"]
     cv = (cv.groupby(["feature_set", "settings"])
           .agg(cv_pr_auc=("pr_auc", "mean"), cv_std=("pr_auc", "std"), cv_auroc=("auroc", "mean"),
                **{f"cv_{m}": (m, "mean") for m in top}, folds=("fold", "nunique"))

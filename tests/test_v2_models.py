@@ -337,7 +337,9 @@ def test_tuning_summaries_leave_out_leakage_check_rows(tmp_path):
     pd.DataFrame([{**r, **metrics} for r in rows]).to_csv(tmp_path / "log.csv", index=False)
     s = experiment.setting_sensitivity("m", "G3", tmp_path / "log.csv").set_index("value")
     assert list(s.index) == [0.1, 1.0] and s.loc[0.1, "mean"] == pytest.approx(0.4)
-    cv, _ = experiment.run_summary("m", ["G3"], tmp_path / "log.csv")
+    # sizes cover the time folds only, so a leakage fold 3 would have no entry
+    sizes = {"val": (100, 5), "cv": {1: (100, 5), 2: (100, 5)}}
+    cv, _ = experiment.run_summary("m", ["G3"], tmp_path / "log.csv", sizes=sizes)
     assert cv.set_index("settings").loc['{"C": 0.1}', "cv_pr_auc"] == pytest.approx(0.4)
     assert (cv["folds"] == 2).all()
 
