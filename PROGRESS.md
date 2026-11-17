@@ -400,6 +400,29 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
 - Results: best is XGBoost on G1 (0.6495), 0.0255 above the best other model (LightGBM, 0.6240 on G3). On G3: XGBoost 0.6434, LightGBM 0.6240, random forest 0.5620, CatBoost 0.5485, MLP 0.4379, logistic regression 0.3525. The spread between models (0.2909 on G3) is far larger than the largest feature gain G0 → G3 (0.0377); G2 → G3 is −0.0046 to +0.0020 for every model. Tree models score known customers far above unknown ones; logistic regression and the MLP the reverse. No model is clearly best per segment on validation (overlapping intervals); on the fold scores XGBoost leads on known and CatBoost on unknown customers.
 - Section 6 (findings) written. `reports/feature_dictionary.md`: the Step 14 placeholder replaced by plain descriptions of the six inputs with the best average rank (fe_D1n, C11, C14, C1, and C2 and fe_amt_log tied for fifth).
 
+## Step 18: Leakage check on G3 (2026-11-17)
+- Built: `src/leakage.py` rewritten for the G0–G3 setup (run `.venv/bin/python -u -m src.leakage`; `--report` rebuilds the report only), `tests/test_leakage.py`, `reports/leakage_check.md` (now G3 only), executed `notebooks/11_leakage_check.ipynb`, README section 13. The F2 check from Step 12 stays in the log and is no longer in the report.
+- Method: LR (C = 0.03) and LightGBM (learning rate 0.03, 127 leaves, minimum child size 300, `reg_lambda` 10, no class weight) on G3, the settings validated in Step 16, read from the G3 validation rows of the log. New: random stratified 5-fold (`cv_scheme` "random") and StratifiedGroupKFold on uid (`cv_scheme` "group_uid"), seed 0, 20 fits. Reused: the 4 Step 16 time-CV tuning rows per model with the same settings. Every fold is fitted like a tuning fold: the pipeline is refit on the fold's training part, and LightGBM trains on the first 90% of that part by time and early-stops on the last 10% (`es_setup` 2), never on the scored rows. Step 12 stopped on the scored rows, so its F2 numbers are not comparable with these.
+- Checks:
+  - The G3 report table has 6 cells, each built from the log with one row per fold (5, 5, 4): pass. `leakage_table` raises otherwise.
+  - The report states which scheme scored highest and by how much, from the logged numbers: pass (random, for both models; margins below).
+  - Group folds share no uid between the two sides of a fold: pass on the real G3 folds (0 shared uids in each of the 5 folds; the random folds share about 40,500 each). The run stops if this fails.
+  - No row in the log has split = test: pass.
+  - Extra: the log grew from 1,742 to 1,762 rows and the earlier 1,742 are byte-identical to a pre-run backup. LightGBM rows from the older early-stopping setup never match. 7 leakage tests (3 new: fold construction and the uid check, early stopping on held-out training rows, chosen settings read from the current validation rows); fast suite 121 passed (V-column correlation tests not run).
+- Numbers (PR-AUC, mean ± sample std over folds, from `reports/leakage_check.md`):
+
+  | Model | Random 5-fold | Group on uid 5-fold | Time CV (4) |
+  | --- | --- | --- | --- |
+  | LR | 0.4417 ± 0.0075 | 0.4201 ± 0.0117 | 0.4110 ± 0.0145 |
+  | LightGBM | **0.8408** ± 0.0103 | 0.6018 ± 0.0131 | 0.5870 ± 0.0256 |
+
+  Random scores highest for both. LR: +0.0216 over group (+5.1%), +0.0307 over time (+7.5%). LightGBM: +0.2390 over group (+39.7%), +0.2538 over time (+43.2%). Fit time 29.5 min for the 20 fits (LR 23-28 s per fold, LightGBM 87-261 s).
+- Open:
+  - **The leakage is model-dependent, as on F2:** random folds add 0.24-0.25 PR-AUC for LightGBM and 0.02-0.03 for LR.
+  - **Group and time are close for LightGBM** (0.6018 vs 0.5870, a gap smaller than the time-CV fold spread of 0.0256). Group and random folds train on 80% of the block and time folds on 28-88%, which favours the 5-fold schemes, so the two are not separated by this check.
+  - **Tree cap:** LightGBM stopped at 941 to 2,218 trees in the random folds and 931 to 2,089 in the group folds, so no fit reached the 3,000 cap.
+  - The saved scores are not needed for this step; nothing was written to `results/preds/`.
+
 ## Ensemble check on the saved scores (2026-11-17)
 - Added `src/ensemble.py` (rank scores within fold or block, weight grid summing to 1, weight search on the time-CV fold scores, segment blend for known vs unknown customers, loaders that check the models' score files cover the same rows) and `notebooks/13_ensemble_check.ipynb`. Read-only: nothing is trained and nothing is written to `results/log.csv`; all weights are chosen on the fold scores and the validation block is used once to check them. Not part of the 6 × 4 grid; adding a blend before the freeze is a group decision.
 - Results (G3; validation PR-AUC mean over seeds 0–2): one set of weights does not beat XGBoost alone (best fold weights 0.6409 vs 0.6434). A segment blend (known customers: XGBoost; unknown: CatBoost 0.6, LightGBM 0.2, XGBoost 0.1, random forest 0.1) scores 0.6551, 0.0056 above the best single cell (XGBoost on G1, 0.6495); the gain is all on unknown customers (0.5554 vs 0.5427), with overlapping intervals. The top ten unknown weightings span 0.6344–0.6353 on the fold scores, all with CatBoost 0.4–0.7.
