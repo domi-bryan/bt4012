@@ -392,7 +392,7 @@ def run_summary(model_name, feature_sets, log_path=LOG_PATH, sizes=None):
         log["precision_top1pct"] = log.apply(prec, axis=1) if len(log) else []
     top = ["recall_top1pct"] + (["precision_top1pct"] if sizes is not None else [])
 
-    cv = log[log["split"] == "cv"]
+    cv = log[(log["split"] == "cv") & (log["cv_scheme"] == "time")]      # tuning folds only, not the leakage check
     cv = (cv.groupby(["feature_set", "settings"])
           .agg(cv_pr_auc=("pr_auc", "mean"), cv_std=("pr_auc", "std"), cv_auroc=("auroc", "mean"),
                **{f"cv_{m}": (m, "mean") for m in top}, folds=("fold", "nunique"))
@@ -450,7 +450,8 @@ def setting_sensitivity(model_name, feature_set, log_path=LOG_PATH, folds=None):
     Returns one row per (setting, value): setting, value, mean, best, worst, combinations.
     """
     log = current_runs(pd.read_csv(log_path))
-    cv = log[(log["model"] == model_name) & (log["feature_set"] == feature_set) & (log["split"] == "cv")]
+    cv = log[(log["model"] == model_name) & (log["feature_set"] == feature_set) & (log["split"] == "cv")
+             & (log["cv_scheme"] == "time")]                            # tuning folds only, not the leakage check
     if cv.empty:
         return pd.DataFrame(columns=["setting", "value", "mean", "best", "worst", "combinations"])
     params = cv["params"].map(json.loads)
