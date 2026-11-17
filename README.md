@@ -163,7 +163,8 @@ On macOS, XGBoost, PyTorch and LightGBM each ship their own OpenMP library and c
 process. Each model notebook imports only its own model library first, which is safe; don't train several model
 libraries in one kernel. The XGBoost test runs in a separate process for the same reason.
 
-Sections 7 to 13 describe the earlier F0–F2 experiments (Steps 6–12), kept for reference.
+Sections 7 to 12 describe the earlier F0–F2 experiments (Steps 6–11), kept for reference. Section 13 is the
+leakage check on G3.
 
 ## 7. Logistic regression baseline (Step 6)
 
@@ -281,18 +282,24 @@ Rebuilds `reports/grid_validation.md` from the validation rows of `results/log.c
 in the top 1%, with the LR → LightGBM and F0 → F2 gains. It refuses to build if any cell is
 missing a seed or has a repeated one.
 
-## 13. Leakage check (Step 12)
+## 13. Leakage check on G3 (Step 18)
 
 ```bash
 OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/python -u -m src.leakage
 ```
 
-Scores LR and LightGBM on F2 (Step 9 best configs) inside the train block under random
-stratified 5-fold and StratifiedGroupKFold on uid (seed 0), logging each fold with
-`cv_scheme` "random" or "group_uid". The time-CV rows for the same configs come from Step 9.
-About 30 minutes and 2 GB peak memory; it resumes rather than duplicating rows and checks
-`results/step12_manifest.json`. `--report` only rebuilds `reports/leakage_check.md` from the
+Scores LR and LightGBM on G3 inside the train block under random stratified 5-fold and
+StratifiedGroupKFold on uid (seed 0), logging each fold with `cv_scheme` "random" or
+"group_uid". The settings are the ones validated in `04_logreg` and `06_lightgbm`, read from
+the log, and the time-CV rows are the tuning rows of those settings, so run those two
+notebooks first. Every fold is fitted like a tuning fold: the pipeline is refit on the fold's
+training part, and LightGBM early-stops on the last 10% (by time) of that part, never on the
+rows it is scored on. It checks that no uid sits on both sides of a group fold, and it resumes
+rather than duplicating rows. `--report` only rebuilds `reports/leakage_check.md` from the
 log. `notebooks/11_leakage_check.ipynb` reads the log and saves `reports/figures/leakage_check.png`.
+
+The first version of this check ran on F2 (Step 12, `results/step12_manifest.json`). Its rows
+stay in the log; the report and notebook now show G3 only.
 
 ## 14. Run the tests
 
