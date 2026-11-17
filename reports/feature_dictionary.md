@@ -41,6 +41,15 @@ Share of training rows where the aggregate is NaN (counts are never NaN):
 | prior_amt_mean, amt_to_prior_mean, secs_since_prev | 2.69% | 38.64% |
 | prior_amt_std | 4.67% | 54.80% |
 
-## Top features (Step 14)
+## Top features (Step 17)
 
-To be added after SHAP: a one-line plain description of each top-5 feature.
+The inputs with the best average permutation-importance rank across the six models on G3 (`notebooks/10_model_comparison.ipynb`, section 5; rank 1 = most important). C2 and `fe_amt_log` tie for fifth. Vesta masks the meaning of the C columns; the descriptions follow the competition's data notes.
+
+| Input | Mean rank | Group | Plain description |
+| --- | --- | --- | --- |
+| `fe_D1n` | 4.8 | G1 row-level | The day the card was first used: TransactionDay minus D1 (days since the card's first transaction), so it is constant for a card across its transactions and, with card1 and addr1, identifies a customer. |
+| `C11` | 9.2 | G0 raw | A masked count linked to the payment card (Vesta's C columns count things such as addresses associated with the card). |
+| `C14` | 11.8 | G0 raw | Another masked count linked to the payment card. |
+| `C1` | 13.5 | G0 raw | A masked count linked to the payment card; the most important input for random forest, LightGBM, XGBoost and CatBoost. |
+| `C2` | 23.2 | G0 raw | Another masked count linked to the payment card. |
+| `fe_amt_log` | 23.2 | G1 row-level | log(1 + TransactionAmt): the amount on a log scale, mainly useful to the linear models and the MLP. |
