@@ -378,7 +378,8 @@ def run_summary(model_name, feature_sets, log_path=LOG_PATH, sizes=None):
     recall (precision = recall * fraud rows / rows flagged), so past runs need no refit.
     """
     log = current_runs(pd.read_csv(log_path))
-    log = log[(log["model"] == model_name) & (log["feature_set"].isin(list(feature_sets)))].copy()
+    log = log[(log["model"] == model_name) & (log["feature_set"].isin(list(feature_sets)))
+              & ((log["split"] != "cv") | (log["cv_scheme"] == "time"))].copy()   # not the leakage-check folds
     params = log["params"].map(json.loads)
     log["settings"] = params.map(lambda d: json.dumps(
         {k: v for k, v in d.items() if k not in NOT_SETTINGS}, sort_keys=True))
@@ -450,7 +451,8 @@ def setting_sensitivity(model_name, feature_set, log_path=LOG_PATH, folds=None):
     Returns one row per (setting, value): setting, value, mean, best, worst, combinations.
     """
     log = current_runs(pd.read_csv(log_path))
-    cv = log[(log["model"] == model_name) & (log["feature_set"] == feature_set) & (log["split"] == "cv")]
+    cv = log[(log["model"] == model_name) & (log["feature_set"] == feature_set) & (log["split"] == "cv")
+             & (log["cv_scheme"] == "time")]                            # tuning folds only, not the leakage check
     if cv.empty:
         return pd.DataFrame(columns=["setting", "value", "mean", "best", "worst", "combinations"])
     params = cv["params"].map(json.loads)

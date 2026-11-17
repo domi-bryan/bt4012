@@ -309,10 +309,10 @@ def test_setting_sensitivity_from_the_tuning_log(tmp_path):
     for c, score in [(0.01, 0.30), (0.1, 0.40), (1.0, 0.35)]:
         for leaf, bump in [(5, 0.02), (20, 0.0)]:
             for fold in (1, 2):
-                rows.append({"model": "m", "feature_set": "G3", "split": "cv", "seed": 0,
+                rows.append({"model": "m", "feature_set": "G3", "cv_scheme": "time", "split": "cv", "seed": 0,
                              "params": json.dumps({"C": c, "leaf": leaf, "fold": fold}),
                              "pr_auc": score + bump + 0.01 * fold})
-    rows.append({"model": "m", "feature_set": "G3", "split": "cv", "seed": 0,       # incomplete: 1 fold only
+    rows.append({"model": "m", "feature_set": "G3", "cv_scheme": "time", "split": "cv", "seed": 0,       # incomplete: 1 fold only
                  "params": json.dumps({"C": 10.0, "leaf": 5, "fold": 1}), "pr_auc": 0.9})
     pd.DataFrame(rows).to_csv(tmp_path / "log.csv", index=False)
     s = experiment.setting_sensitivity("m", "G3", tmp_path / "log.csv")
@@ -324,8 +324,28 @@ def test_setting_sensitivity_from_the_tuning_log(tmp_path):
     assert leaf.loc[5, "mean"] - leaf.loc[20, "mean"] == pytest.approx(0.02)
 
 
+def test_tuning_summaries_leave_out_leakage_check_rows(tmp_path):
+    """Random and group folds logged by the leakage check share the chosen settings; they must not
+    enter the time-CV means or change which combinations count as complete."""
+    rows = [{"model": "m", "feature_set": "G3", "cv_scheme": "time", "split": "cv", "seed": 0,
+             "params": json.dumps({"C": c, "fold": f}), "pr_auc": score}
+            for c, score in [(0.1, 0.4), (1.0, 0.3)] for f in (1, 2)]
+    rows += [{"model": "m", "feature_set": "G3", "cv_scheme": scheme, "split": "cv", "seed": 0,
+              "params": json.dumps({"C": 0.1, "fold": f}), "pr_auc": 0.9}
+             for scheme in ("random", "group_uid") for f in (1, 2, 3)]
+    metrics = {"auroc": 0.9, "recall_top1pct": 0.3, "precision": None, "recall": None}
+    pd.DataFrame([{**r, **metrics} for r in rows]).to_csv(tmp_path / "log.csv", index=False)
+    s = experiment.setting_sensitivity("m", "G3", tmp_path / "log.csv").set_index("value")
+    assert list(s.index) == [0.1, 1.0] and s.loc[0.1, "mean"] == pytest.approx(0.4)
+    # sizes cover the time folds only, so a leakage fold 3 would have no entry
+    sizes = {"val": (100, 5), "cv": {1: (100, 5), 2: (100, 5)}}
+    cv, _ = experiment.run_summary("m", ["G3"], tmp_path / "log.csv", sizes=sizes)
+    assert cv.set_index("settings").loc['{"C": 0.1}', "cv_pr_auc"] == pytest.approx(0.4)
+    assert (cv["folds"] == 2).all()
+
+
 def test_setting_sensitivity_keeps_none_and_integers(tmp_path):
-    rows = [{"model": "rf", "feature_set": "G3", "split": "cv", "seed": 0,
+    rows = [{"model": "rf", "feature_set": "G3", "cv_scheme": "time", "split": "cv", "seed": 0,
              "params": json.dumps({"max_depth": d, "leaf": 5, "fold": f}), "pr_auc": score}
             for d, score in [(12, 0.3), (None, 0.4)] for f in (1, 2)]
     pd.DataFrame(rows).to_csv(tmp_path / "log.csv", index=False)
@@ -334,7 +354,7 @@ def test_setting_sensitivity_keeps_none_and_integers(tmp_path):
 
 
 def test_setting_sensitivity_value_column_keeps_types(tmp_path):
-    rows = [{"model": "m", "feature_set": "G3", "split": "cv", "seed": 0,
+    rows = [{"model": "m", "feature_set": "G3", "cv_scheme": "time", "split": "cv", "seed": 0,
              "params": json.dumps({"leaves": lv, "lr": lr, "fold": 1}), "pr_auc": 0.1 * lv / 15 + lr}
             for lv in (15, 31) for lr in (0.03, 0.1)]
     pd.DataFrame(rows).to_csv(tmp_path / "log.csv", index=False)

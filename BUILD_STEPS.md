@@ -206,7 +206,7 @@ These steps ran between 2026-10-18 and 2026-10-22 on the F0–F2 feature sets (F
 
 Rules for this part:
 
-- Do not rerun `src.train_trees`, `src.train_mlp`, `src.train_catboost` or `src.leakage` for F0–F2. Their manifests fingerprint model code that has since changed, so they refuse to resume, and the old LightGBM and CatBoost settings can no longer be reproduced.
+- Do not rerun `src.train_trees`, `src.train_mlp` or `src.train_catboost`. `src.leakage` now runs the G3 check (Step 18) and no longer covers F2. The manifests of those three scripts fingerprint model code that has since changed, so they refuse to resume, and the old LightGBM and CatBoost settings can no longer be reproduced.
 - Their notebooks are in `notebooks/archive/` and are not meant to be rerun.
 - The report uses G0–G3 results only. `src/summarise.py` and `reports/grid_validation.md` stay as the F0–F2 record and are not regenerated.
 
@@ -373,7 +373,7 @@ This replaces the Step 12 check on F2 as the report's leakage table.
 
 **Do**
 
-1. Using G3 and the chosen settings of LR and LightGBM from Step 16, run two more schemes inside the train block with seed 0: random stratified 5-fold and StratifiedGroupKFold on uid (5 folds). Reuse the Step 16 time-CV rows of the same settings.
+1. Using G3 and the chosen settings of LR and LightGBM from Step 16 (read from the G3 validation rows of the log), run two more schemes inside the train block with seed 0: random stratified 5-fold and StratifiedGroupKFold on uid (5 folds). Reuse the Step 16 time-CV rows of the same settings.
 2. Fit as in tuning: refit the pipeline on each fold's training part, and let LightGBM early-stop on the last 10% of that training part. Step 12 stopped on the fold's validation part, so its F2 numbers are not directly comparable.
 3. Log every fold with `feature_set` G3 and `cv_scheme` `random` or `group_uid`.
 4. Rebuild `reports/leakage_check.md` and the notebook from the G3 rows: mean ± std PR-AUC per model per scheme. The F2 rows stay in the log.
