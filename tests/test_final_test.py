@@ -155,6 +155,10 @@ def test_report_tables(transactions, tmp_path):
     assert set(t.index) == {("logreg", "G0"), ("logreg", "G3")} and (t["count"] == 2).all()
     text = final_test.render(rows)
     assert "Logistic regression" in text and "not run" in text
+    blend = rows[(rows.split == "test") & (rows.feature_set == "G3")].assign(model="segment_blend")
+    text = final_test.render(pd.concat([rows, blend]))
+    blend_row = next(line for line in text.splitlines() if line.startswith("| Segment blend"))
+    assert blend_row.count("n/a") == 3 and "not run" not in blend_row     # G3 only by design, not missing
 
 
 def test_loader_with_test_block():
