@@ -2,12 +2,12 @@
 
 Read this before working on any part of the project. It records what the group decided and why, so code and report text stay consistent with the approved proposal and the TA's feedback.
 
-Updated 2026-11-17 for the `features_v2` table, its G0–G3 feature sets and six models. The earlier plan (feature sets F0–F2, four models) was run as a first pass in October; it is recorded in `PROGRESS.md` and Part 2 of `BUILD_STEPS.md`.
+Updated 2026-11-17 for the `features_v2` table, its G0–G3 feature sets and six models, and on 2026-11-20 for the experiment freeze, the segment blend and the final test scoring. The earlier plan (feature sets F0–F2, four models) was run as a first pass in October; it is recorded in `PROGRESS.md` and Part 2 of `BUILD_STEPS.md`.
 
 ## Project
 
 - **Course:** BT4012 Fraud Analytics (NUS).
-- **Team:** Damien Koh, Jarren Oh, Mabel You, Dominic Bryan. Roles A to D are not yet assigned to names.
+- **Team:** Damien Koh, Jarren Oh, Mabel You, Dominic Bryan.
 - **Title:** Benchmarking Various Fraudulent e-Commerce Transaction Detection Methods.
 - **Proposal:** https://docs.google.com/document/d/1tngV5MgwvL5uSp1BHHHMvFMtiYPxHm8grSQRcmBYr9c
 - **Plan (Google Doc):** https://docs.google.com/document/d/1BnIaWixwG8-rUpJF8Vu6WKsmWJPDfN8-MOt4_7Yct54
@@ -49,7 +49,7 @@ Chronological 80/10/10, sorted by TransactionDT:
 
 - **Train:** first 80% (472,432 rows). Hyperparameter tuning uses expanding-window CV inside it (30-day bins, train on bins 1..k, validate on bin k+1, 4 folds).
 - **Validation:** next 10% (59,054 rows). Used for threshold choice and for comparing models and feature sets.
-- **Test:** last 10% (59,054 rows). Scored once, after the experiment freeze.
+- **Test:** last 10% (59,054 rows). Scored once, on 17–18 Nov 2026, after the group agreed the experiment freeze on 17 Nov. Nothing was tuned, re-thresholded or chosen on it.
 
 Random K-fold is a comparison in the leakage check only, never the main scheme.
 
@@ -62,7 +62,7 @@ Every feature and every fold must use only information available at transaction 
 - Every fitted transform (imputer, scaler, encoder, V-column pruning) is fit on training rows only, and refit on each fold's training part.
 - Resampling and class weighting apply inside a fold's training part only. Validation and test keep the true 3.5% fraud rate.
 - Early stopping uses rows held out of the training part, never the rows a model is scored on (see Tuning and fitting).
-- **Leakage check (report table):** run LR and LightGBM on G3 with their chosen settings under random stratified K-fold, StratifiedGroupKFold on uid, and time-ordered CV. Report PR-AUC for each. Random K-fold is expected to score highest because the model recognises customers it has already seen. (On G3: confirmed 2026-11-17. The first-pass check on F2 is not used in the report.)
+- **Leakage check (report table):** run LR and LightGBM on G3 with their chosen settings under random stratified K-fold, StratifiedGroupKFold on uid, and time-ordered CV. Report PR-AUC for each. Random K-fold scores highest because the model recognises customers it has already seen (LightGBM on G3: random 0.8408, grouped by uid 0.6018, time CV 0.5870; `reports/leakage_check.md`). (On G3: confirmed 2026-11-17. The first-pass check on F2 is not used in the report.)
 - **Known vs unknown customers:** report PR-AUC separately for known customers (uid seen in the train block) and unknown ones, on the validation block and on the test block. (Definition for the test block confirmed 2026-11-17.)
 
 ### Models
@@ -77,6 +77,15 @@ Every feature and every fold must use only information available at transaction 
 | MLP | Deep learning (Lecture 4) | Same prep as LR; dropout and weight decay |
 
 All six are full members of the benchmark. Every model gets the same input columns for a given feature set; only the representation differs.
+
+### Segment blend
+
+A blend of the tree models on G3, adopted before the freeze (`notebooks/13_ensemble_check.ipynb`, fixed in `src/ensemble.py`). Each model's scores are turned into percentile ranks within the scored block, and each transaction is scored by whether its customer is known (uid seen in the train block), which needs no label and is available when the transaction arrives:
+
+- **Known customers:** XGBoost only.
+- **Unknown customers:** CatBoost 0.6, LightGBM 0.2, XGBoost 0.1, random forest 0.1.
+
+The weights were chosen from every weighting in steps of 0.1 by mean PR-AUC on the time-CV fold scores, never on the validation block, and checked on validation. The blend needs no training. Its F1 threshold is picked on validation and reused on test, like every model's. It is reported beside the 24 cells, not as a seventh model across all sets.
 
 ### Feature sets
 
@@ -94,7 +103,7 @@ Four cumulative sets from `data/processed/features_v2.parquet`, defined in `conf
 - **V columns:** within each group of V columns that go missing together, drop a column if |Pearson r| > 0.75 with one already kept. The threshold was chosen in `notebooks/03_v_threshold.ipynb` and replaces the first proposal of 0.9.
 - **Engineered features** are kept only if the EDA supports them and their link to fraud holds between the first and last 30 days of the train block.
 
-The core experiment is a **6 models x 4 feature sets grid** (24 cells) on the validation block. RQ3 is answered by comparing the gain between models against the gain from G0 to G3, with G2 → G3 as the customer-profile step.
+The core experiment is a **6 models x 4 feature sets grid** (24 cells) on the validation block, scored once on the test block after the freeze, plus the segment blend on G3. RQ3 is answered by comparing the gain between models against the gain from G0 to G3, with G2 → G3 as the customer-profile step.
 
 The report uses G0–G3 results only (confirmed 2026-11-17).
 
@@ -132,16 +141,21 @@ config/features_v2.yaml  G0-G3 column lists, exclusions, train-block constants
 src/data.py              load, join, clean, tree-ready and linear-ready pipelines
 src/domain_features.py   uid and the engineered fe_ columns
 src/feature_selection.py V-column pruning, time-stability check
-src/feature_sets.py      load_features() (test block removed), feature_list("G0".."G3")
+src/feature_sets.py      load_features() (test block removed), feature_list("G0".."G3"),
+                         load_features_with_test() (final test scoring only)
 src/split.py             holdout indices, CV fold generators
 src/metrics.py           evaluate(y_true, y_score) -> dict
 src/experiment.py        tune_and_validate, fit_final, current_runs, setting_sensitivity
 src/segments.py          known vs unknown customers, bootstrap intervals
 src/importance.py        permutation and built-in importance
+src/ensemble.py          the segment blend (weights fixed before the freeze)
+src/final_test.py        final test scoring: refit, reproduction check, test rows, report
 src/models/              one file per model
 notebooks/               01 EDA, 02 features, 03 V threshold, 04-09 one per model,
-                         10 comparison, 11 leakage check; shared logic lives in src/
+                         10 comparison, 11 leakage check, 12 test results,
+                         13 ensemble check; shared logic lives in src/
 results/log.csv          one row appended per run
+reports/test_results.md  final test tables, built from the log
 ```
 
 - `split.py` returns row indices, so every model trains and scores on identical rows.
@@ -149,19 +163,6 @@ results/log.csv          one row appended per run
 - `evaluate()` returns the metrics listed above.
 - `results/log.csv` columns: date, author, model, feature_set, cv_scheme, split (cv/val/test), seed, params (JSON), pr_auc, auroc, precision, recall, recall_top1pct, runtime_s. The fold, the threshold and fit details sit inside `params`.
 - Summaries read the log through `experiment.current_runs`, which leaves out early-stopping runs from before the refit rule.
-
-## Roles
-
-| Role | Owns | Report sections |
-| --- | --- | --- |
-| A: Data pipeline + MLP | Join, cleaning, missingness, V-column threshold, both pipelines, MLP, README | Dataset, Preprocessing, MLP; final edit |
-| B: EDA + features | RQ1 EDA, uid, `features_v2` and the G0–G3 sets, feature dictionary, feature importance | EDA, Feature engineering, RQ1 |
-| C: Validation + baseline | split.py, metrics.py, results log, shared run code, LR, model comparison, leakage check, known vs unknown analysis, test scoring | Experimental setup, Results |
-| D: Tree models + tuning | RF, LightGBM, RQ4 settings analysis | Models, RQ4 |
-
-XGBoost and CatBoost were added after the roles were drawn and have no role yet (see Open questions).
-
-Discussion of RQ2 and RQ3, limitations and conclusion are written together.
 
 ## Timeline
 
@@ -171,7 +172,9 @@ Discussion of RQ2 and RQ3, limitations and conclusion are written together.
 | Oct 18-22 | First pass on F0–F2: splits, metrics, pipelines, four models, leakage check |
 | Nov 14 | Move to `features_v2`, G0–G3 and six models; shared run code and model notebooks |
 | Nov 15-16 | Model runs on G0–G3 |
-| Nov 17-20 | Remaining build steps: logistic regression write-up, model comparison, leakage check on G3, experiment freeze, test scoring. Write and review. |
+| Nov 17 | Model comparison, leakage check on G3, ensemble check and segment blend; experiment freeze agreed |
+| Nov 17-18 | Final test scoring of all six models and the blend (75 test rows) |
+| Nov 18-20 | Test findings, README and documentation; write and review the report |
 | Nov 20 | Report due |
 
 ## Report requirements
@@ -184,17 +187,15 @@ The TA asked for detail and justification in every section. Each section states 
 - Experimental setup: the chronological split, why random K-fold misleads here, why PR-AUC leads.
 - Models: why each suits imbalanced tabular fraud data.
 
+Discussion of RQ2 and RQ3, limitations and conclusion are written together.
+
 Fix in proposal wording: "train/validation/split" should read "train/validation/test".
 
-## Open questions
-
-- Date of the experiment freeze. It has to leave time for test scoring and writing before 20 Nov.
-- Who takes Roles A to D, and who writes up XGBoost and CatBoost.
-- Whether to build an ensemble from the saved fold scores. No build step covers one.
-
-Settled since the first version of this file:
+## Settled questions
 
 - Report deadline: 20 Nov 2026.
+- Experiment freeze: agreed 17 Nov 2026; the test block was scored on 17–18 Nov.
+- Ensemble: the segment blend above, chosen on the time-CV fold scores before the freeze.
 - RQ3's "user profile" means the customer history features that G3 adds to G2.
 - The results log is `results/log.csv` in the repo, shared by all members.
 - Compute runs on members' own machines.

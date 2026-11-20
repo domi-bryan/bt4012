@@ -1,4 +1,4 @@
-"""Role C: final test scoring (Step 19). Run only after the experiment freeze.
+"""Final test scoring (Step 19). Run only after the experiment freeze.
 
 For one model, each of the 12 cells (G0-G3 x seeds 0, 1, 2) is refitted on the train block exactly as in
 its validation run (`experiment.fit_final`: same settings, seed and rows, and the same two-step early

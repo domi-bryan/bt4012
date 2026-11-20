@@ -1,4 +1,4 @@
-"""Role C: leakage check on G3 (Step 18).
+"""Leakage check on G3 (Step 18).
 
 LR and LightGBM on G3 with the settings chosen in Step 16 (notebooks 04 and 06), scored inside the
 train block under three CV schemes. The time-CV rows are the Step 16 tuning rows of those settings and

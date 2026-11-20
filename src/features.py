@@ -1,4 +1,4 @@
-"""Role B: customer ID (uid) and feature-set builders.
+"""Customer ID (uid) and feature-set builders.
 
 uid = card1 + "_" + addr1 + "_" + account_open_day, where account_open_day =
 floor(TransactionDay - D1). It is approximate; `reports/uid_check.md` validates it.

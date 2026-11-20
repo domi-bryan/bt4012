@@ -1,4 +1,4 @@
-"""Role C: shared time-CV tuning and validation runs. Every fit appends one row to the log.
+"""Shared time-CV tuning and validation runs. Every fit appends one row to the log.
 
 A model module exposes `NAME`, `fit(X, y, X_val, y_val, params, seed)` returning an object
 with `predict_proba(X)`. `make_pipeline()` returns an unfitted pipeline from `src.data`;

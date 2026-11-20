@@ -1,4 +1,4 @@
-"""Role C: 4 x 3 validation grid summary from results/log.csv (Step 11).
+"""4 x 3 validation grid summary from results/log.csv (Step 11).
 
 Every number in the report is computed from the log's validation rows; nothing is typed in.
 Run `.venv/bin/python -m src.summarise` to regenerate reports/grid_validation.md.

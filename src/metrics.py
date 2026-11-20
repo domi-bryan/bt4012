@@ -1,4 +1,4 @@
-"""Role C: evaluation metrics (Step 4). PR-AUC is primary; the no-skill baseline is the fraud rate."""
+"""Evaluation metrics (Step 4). PR-AUC is primary; the no-skill baseline is the fraud rate."""
 import numpy as np
 from sklearn.metrics import (average_precision_score, precision_recall_curve,
                              precision_score, recall_score, roc_auc_score)

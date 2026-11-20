@@ -1,4 +1,4 @@
-"""Role C: holdout blocks and CV fold generators (Step 3).
+"""Holdout blocks and CV fold generators (Step 3).
 
 Every function returns positional row indices into the time-sorted table from `src.data`,
 so every model trains and scores on identical rows. Do not re-sort the table.
