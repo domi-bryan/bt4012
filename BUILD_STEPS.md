@@ -22,7 +22,7 @@ On 2026-11-14 the group moved from the F0–F2 feature sets and four models to t
 - **Part 2 (Steps 6, 8–12):** the first pass on F0–F2. Finished and superseded; kept as a short record.
 - **Part 3 (Steps 13–19):** the G0–G3 build, finished on 2026-11-18 with the final test scoring. The report uses its results only.
 
-Steps 0–12 keep their numbers, so earlier `PROGRESS.md` entries, the README and the `results/step*_manifest.json` files still point at the right step. The earlier Steps 13–15 were never started and are replaced:
+Steps 0–12 keep their numbers, so earlier `PROGRESS.md` entries and the README still point at the right step. The earlier Steps 13–15 were never started and are replaced:
 
 | Earlier step | Now |
 | --- | --- |
@@ -192,23 +192,23 @@ The same uid definition is rebuilt in `src/domain_features.make_uid` for Step 14
 
 # Part 2: First pass on F0–F2 (finished, superseded)
 
-These steps ran between 2026-10-18 and 2026-10-22 on the F0–F2 feature sets (F0 raw, F1 + card1 aggregates, F2 + uid aggregates) with LR, RF, LightGBM and the MLP, plus an optional CatBoost run. Their full results are in `PROGRESS.md` and their rows stay in `results/log.csv` under feature sets F0, F1 and F2. They are not part of the current plan.
+These steps ran between 2026-10-18 and 2026-10-22 on the F0–F2 feature sets (F0 raw, F1 + card1 aggregates, F2 + uid aggregates) with LR, RF, LightGBM and the MLP, plus an optional CatBoost run. Their full results are in `PROGRESS.md` and their rows stay in `results/log.csv` under feature sets F0, F1 and F2. They are not part of the G0–G3 build or the report. Their training scripts, settings, manifests, summaries and notebooks (marked "removed" below) were deleted before submission and remain in the git history.
 
 | Step | What it built | Used by the G0–G3 build? |
 | --- | --- | --- |
 | 6: LR baseline on F0 | `src/models/logreg.py`, `src/experiment.py` (`time_cv`, `best_params`, `fit_validate`) | Yes: the model module and the experiment helpers. The C grid changed (Step 15). |
 | 8: Past-only aggregates F1, F2 | `src/features.py` (`past_aggregates`, `build_feature_set`), `reports/feature_dictionary.md` | No. G2 and G3 history features come from `src/domain_features.py` (Step 14). |
-| 9: Tree models on F0–F2 | `src/models/rf.py`, `src/models/lgbm.py`, `src/train_trees.py`, `config/best_params.yaml` | The model modules only. Grids, subsampling and early stopping changed (Step 15). |
-| 10: MLP on F0–F2 | `src/models/mlp.py`, `src/train_mlp.py` | The model module only. Search and early stopping changed (Step 15). |
-| 11: Grid summary | `src/summarise.py`, `reports/grid_validation.md` (4 x 3 table on F0–F2) | No. Replaced by `notebooks/10_model_comparison.ipynb` (Step 17). |
+| 9: Tree models on F0–F2 | `src/models/rf.py`, `src/models/lgbm.py`; `src/train_trees.py`, `config/best_params.yaml` (removed) | The model modules only. Grids, subsampling and early stopping changed (Step 15). |
+| 10: MLP on F0–F2 | `src/models/mlp.py`; `src/train_mlp.py` (removed) | The model module only. Search and early stopping changed (Step 15). |
+| 11: Grid summary | `src/summarise.py`, `reports/grid_validation.md` (4 x 3 table on F0–F2; removed) | No. Replaced by `notebooks/10_model_comparison.ipynb` (Step 17). |
 | 12: Leakage check on F2 | `src/leakage.py`, `reports/leakage_check.md`, `notebooks/11_leakage_check.ipynb` | The code is reused by Step 18. |
-| Optional CatBoost on F0–F2 (no step number) | `src/train_catboost.py`, `src/models/catboost.py`, `config/catboost_best_params.yaml`, `reports/catboost_sensitivity_F2.*` | The model module only. |
+| Optional CatBoost on F0–F2 (no step number) | `src/models/catboost.py`; `src/train_catboost.py`, `config/catboost_best_params.yaml`, `reports/catboost_sensitivity_F2.*` (removed) | The model module only. |
 
-Rules for this part:
+Notes on this part:
 
-- Do not rerun `src.train_trees`, `src.train_mlp` or `src.train_catboost`. `src.leakage` now runs the G3 check (Step 18) and no longer covers F2. The manifests of those three scripts fingerprint model code that has since changed, so they refuse to resume, and the old LightGBM and CatBoost settings can no longer be reproduced.
-- Their notebooks are in `notebooks/archive/` and are not meant to be rerun.
-- The report uses G0–G3 results only. `src/summarise.py` and `reports/grid_validation.md` stay as the F0–F2 record and are not regenerated.
+- `src.leakage` now runs the G3 check (Step 18) and no longer covers F2.
+- The removed scripts could not have been rerun as they were: their manifests fingerprinted model code that has since changed, and the old LightGBM and CatBoost settings can no longer be reproduced.
+- The report uses G0–G3 results only.
 
 ---
 

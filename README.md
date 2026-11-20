@@ -5,7 +5,7 @@ Benchmark of six fraud detection models (logistic regression, random forest, Lig
 Notebooks, in reading order: `01_eda` (exploratory analysis) → `02_feature_engineering` (builds `features_v2`
 and the G0–G3 feature groups) → `03_v_threshold` (chooses the V-column threshold, r = 0.75) → one notebook per
 model (`04_logreg` to `09_mlp`) → `10_model_comparison` → `11_leakage_check` → `13_ensemble_check` (chooses the
-segment blend) → `12_test` (final test results). Superseded notebooks are in `notebooks/archive/`.
+segment blend) → `12_test` (final test results).
 
 ## 1. Set up the environment
 
@@ -76,7 +76,7 @@ are preserved. V-column pruning is not applied.
 
 - The loaded table keeps NaN as NaN. Missingness is itself a signal (most rows have no identity record), so nothing is dropped or filled at load time.
 - Imputation, scaling and encoding are fitted transforms. `TreePipeline` and `LinearPipeline` in `src/data.py` fit on each fold's training rows only. Never fit a transform on the whole table.
-- V-column pruning: the group agreed to drop V columns correlated above r = 0.75 with a kept one (`notebooks/03_v_threshold.ipynb`), and the G0–G3 feature sets in `config/features_v2.yaml` use only that rule. The older r > 0.9 list in `config/features.yaml` was used only by the F0–F2 first pass (sections 7–12), and `src/data.py` still warns that this older list is unapproved whenever it is loaded.
+- V-column pruning: the group agreed to drop V columns correlated above r = 0.75 with a kept one (`notebooks/03_v_threshold.ipynb`), and the G0–G3 feature sets in `config/features_v2.yaml` use only that rule. The older r > 0.9 list in `config/features.yaml` was used only by the F0–F2 first pass (see below), and `src/data.py` still warns that this older list is unapproved whenever it is loaded.
 
 To regenerate the data profile and V-column proposal (about 1 minute):
 
@@ -163,22 +163,10 @@ On macOS, XGBoost, PyTorch and LightGBM each ship their own OpenMP library and c
 process. Each model notebook imports only its own model library first, which is safe; don't train several model
 libraries in one kernel. For the same reason the XGBoost test and the LightGBM final-test test run in separate processes.
 
-Sections 7 to 12 describe the earlier F0–F2 experiments (Steps 6–11), kept for reference. Section 13 is the
-leakage check on G3, section 14 the segment blend and section 15 the final test scoring.
+Section 7 is the customer ID check, section 8 the leakage check on G3, section 9 the segment blend and section 10
+the final test scoring.
 
-## 7. Logistic regression baseline (Step 6)
-
-```bash
-.venv/bin/python -m src.models.logreg
-```
-
-Tunes C over {0.01, 0.1, 1, 10} with time CV on the train block, refits the best C on the
-whole train block and scores the validation block. Each fold and the validation result
-append a row to `results/log.csv` (about 13 minutes, 1.5 GB peak memory). It refuses to run
-again for the same feature set unless you pass `--force`. The results notebook for
-these runs is archived as `notebooks/archive/02_baseline.ipynb`.
-
-## 8. Customer ID check (Step 7)
+## 7. Customer ID check (Step 7)
 
 ```bash
 .venv/bin/python -m src.features
@@ -188,101 +176,7 @@ Builds uid = card1 + addr1 + floor(TransactionDay - D1) (`add_uid` in `src/featu
 writes `reports/uid_check.md`: group counts and sizes, fraud concentration on the train block,
 and how many validation/test customers already appear in earlier blocks. Takes a few seconds.
 
-## 9. Features and tree models (Steps 8–9)
-
-`build_feature_set(df, "F1")` adds prior card history; `"F2"` also adds prior customer
-history. Definitions and tied-timestamp conventions are in `reports/feature_dictionary.md`.
-The LR command above also accepts `--feature-set F1` or `--feature-set F2`.
-
-Run the Step 9 experiment with:
-
-```bash
-OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/python -u -m src.train_trees
-```
-
-This uses the existing F0 LR results, tunes LR on F1/F2, and tunes RF and LightGBM
-on all three feature sets using time CV with seed 0. Selected configurations are
-validated with seeds 0, 1 and 2. The test block is excluded before feature construction.
-Run only one training command at a time.
-
-- LightGBM: a reproducible sample of 20 configurations over `num_leaves`,
-  `learning_rate`, `min_child_samples`, and `scale_pos_weight`. The balanced
-  weight is recomputed from each training part. Early stopping uses validation
-  average precision with patience 50 and a cap of 1,500 trees.
-- RF: four combinations of depth {12, 24} and minimum leaf size {5, 20},
-  with 300 trees and `class_weight="balanced_subsample"`.
-- LR: the same C grid as Step 6.
-
-Every completed fit appends to `results/log.csv`. Repeating the command resumes
-missing folds and validation seeds; it does not rerun completed fits. Optional
-`--models logreg rf lgbm` and `--feature-sets F0 F1 F2` restrict the work.
-`results/step9_manifest.json` fingerprints the data, feature configuration, model
-code and package versions; a changed fingerprint stops resumption to avoid mixing
-experiments. `config/best_params.yaml` is updated after each cell's tuning completes.
-LightGBM's actual best iteration and resolved weight are stored in `params._fit`
-in each log row; validation thresholds remain in `params.threshold`.
-
-The results notebook for these runs is archived as `notebooks/archive/03_trees.ipynb` (it is not
-meant to be rerun from there). It checked all 27 selected validation runs and the complete CV grid, and
-generates `reports/figures/trees_validation.png` from the log. The completed Step 9
-results and per-seed runtimes are recorded in `PROGRESS.md`. Results remain
-provisional on the V-column proposal.
-
-## 10. MLP (Step 10)
-
-```bash
-.venv/bin/python -u -m src.train_mlp
-```
-
-PyTorch MLP on the linear pipeline output, on CPU with 4 threads: two ReLU hidden layers
-(hidden, hidden/2) with dropout, Adam, batch 2,048, `BCEWithLogitsLoss` with
-`pos_weight = negatives / positives` from the training part, early stopping on validation
-PR-AUC (patience 5, max 40 epochs, best epoch restored). Grid: hidden {128, 256} x dropout
-{0.1, 0.3} x learning rate {3e-4, 1e-3}, tuned with time CV (seed 0) on F0, F1 and F2; the
-best config is validated with seeds 0, 1 and 2. About 21 minutes and 1.8 GB peak memory.
-Like Step 9 it resumes instead of duplicating rows, and refuses to run if its inputs changed
-since `results/step10_manifest.json` was written. Per-epoch loss and validation PR-AUC are
-stored in each log row's `params._fit`; the archived
-`notebooks/archive/04_mlp.ipynb` read them and saved `reports/figures/mlp_training_curves.png`.
-
-## 11. CatBoost
-
-```bash
-.venv/bin/python -u -m src.train_catboost --mode tune         # time-CV tuning on F0, F1, F2, then validation seeds 0, 1, 2
-.venv/bin/python -u -m src.train_catboost --mode sensitivity  # one-parameter sweeps on F2
-.venv/bin/python -u -m src.train_catboost --mode report       # rebuilds reports/catboost_sensitivity_F2.{md,csv} and plots
-```
-
-CatBoost uses the same splits, time-CV folds, features and logging as the other tree models
-(`src/catboost_pipeline.py` subclasses the shared `TreePipeline`). Tuning evaluates a
-reproducible sample of 20 configurations over depth {4, 6, 8}, learning rate {0.03, 0.1}, L2
-regularisation {1, 3, 10} and positive class weight {1, balanced}, picks the best by mean
-time-CV average precision (seed 0), and validates it with seeds 0, 1 and 2. Fits use up to
-1,500 trees with early stopping (patience 50) on unweighted average precision, on six CPU
-threads. Selected settings are written to `config/catboost_best_params.yaml`;
-`results/catboost_manifest.json` fingerprints the inputs and stops a resumed run if they changed.
-
-Sensitivity varies one parameter at a time from the selected F2 configuration (depth 3 to 10,
-learning rate 0.01 to 0.3, L2 0.1 to 30, class weight 1 to 100 or balanced), with three seeds
-each (21 configurations, 63 fits). Plots go to `reports/figures/sweep_catboost_F2_*.png`.
-
-**Categories:** only CatBoost's built-in one-hot encoding is used (`one_hot_max_size` at least
-the largest training cardinality), so no target statistics are computed and nothing is
-target-encoded. Raw `uid` is rejected as an input, and rows keep their time order
-(`has_time=True`).
-
-## 12. Validation grid summary (Step 11)
-
-```bash
-.venv/bin/python -m src.summarise
-```
-
-Rebuilds `reports/grid_validation.md` from the validation rows of `results/log.csv`: the
-4 models x 3 feature sets table (mean ± std over seeds 0, 1, 2) for PR-AUC, AUROC and recall
-in the top 1%, with the LR → LightGBM and F0 → F2 gains. It refuses to build if any cell is
-missing a seed or has a repeated one.
-
-## 13. Leakage check on G3 (Step 18)
+## 8. Leakage check on G3 (Step 18)
 
 ```bash
 OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/python -u -m src.leakage
@@ -298,10 +192,7 @@ rows it is scored on. It checks that no uid sits on both sides of a group fold, 
 rather than duplicating rows. `--report` only rebuilds `reports/leakage_check.md` from the
 log. `notebooks/11_leakage_check.ipynb` reads the log and saves `reports/figures/leakage_check.png`.
 
-The first version of this check ran on F2 (Step 12, `results/step12_manifest.json`). Its rows
-stay in the log; the report and notebook now show G3 only.
-
-## 14. Segment blend (ensemble check)
+## 9. Segment blend (ensemble check)
 
 `notebooks/13_ensemble_check.ipynb` chooses the blend from the saved time-CV fold scores and checks it on the
 validation block. Scores are turned into percentile ranks within the scored block, and each transaction is
@@ -319,7 +210,7 @@ the saved validation scores of the four models:
 .venv/bin/python -m src.ensemble --log-validation
 ```
 
-## 15. Final test scoring (Step 19)
+## 10. Final test scoring (Step 19)
 
 The test block (the last 10% by time, 59,054 rows) was scored once, after the group agreed the experiment freeze on
 17 Nov 2026. No setting, threshold, feature set or model choice changed after the freeze.
@@ -344,13 +235,22 @@ reproduce its logged test PR-AUC) and applies the blend's stored validation thre
 rows: 6 models x 4 sets x 3 seeds, plus 3 for the blend. `notebooks/12_test.ipynb` reads them and shows the test
 tables, the change from validation to test, known vs unknown customers on test, and the blend against XGBoost.
 
-## 16. Run the tests
+## 11. Run the tests
 
 ```bash
 .venv/bin/python -m pytest -q tests
 ```
 
 Tests that need the real table are skipped if `joined.parquet` has not been built. The V-column correlation test takes about 3 minutes.
+
+## Earlier first pass (F0–F2)
+
+In October the group ran a first pass on three feature sets, F0 (raw), F1 (+ card1 history) and F2 (+ customer
+history), with logistic regression, random forest, LightGBM, the MLP and CatBoost. It was superseded by the G0–G3
+build and is not used in the report. Its training scripts, settings files, manifests, summaries and notebooks were
+removed before submission (they remain in the git history); its rows stay in `results/log.csv` under feature sets
+F0, F1 and F2 and are left out of every G0–G3 table. `PROGRESS.md` and Part 2 of `BUILD_STEPS.md` record what it
+found.
 
 ## Rules to keep in mind
 

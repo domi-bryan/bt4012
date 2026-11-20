@@ -1,17 +1,16 @@
-"""Contract, encoding policy, exact early-stopping metric and shared runner integration."""
+"""Contract, encoding policy and exact early-stopping metric."""
 import json
 
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 from sklearn.metrics import average_precision_score
 
-from src import data, experiment, train_catboost as runner
+from src import data
 from src.catboost_pipeline import CatBoostPipeline, MISSING_CATEGORY
 from src.features import agg_columns, build_feature_set
 from src.models import catboost
-from src.split import holdout_indices, time_cv_folds
+from src.split import holdout_indices
 
 SMALL = {"iterations": 12, "depth": 3, "thread_count": 1, "early_stopping_rounds": 3}
 
@@ -123,113 +122,3 @@ def test_model_contract_weights_determinism_and_no_target_statistics(transaction
     repeated = catboost.fit(X, y, V, v, SMALL, seed=2)
     np.testing.assert_array_equal(score, repeated.predict_proba(V))
     assert not (data.ROOT / "catboost_info").exists()
-
-
-def test_cv_validation_resume_and_sensitivity_use_shared_log(transactions, tmp_path, monkeypatch):
-    transactions = build_feature_set(transactions, "F2")
-    tr, va, _ = holdout_indices(transactions)
-    log, best = tmp_path / "log.csv", tmp_path / "best.yaml"
-    make = lambda: CatBoostPipeline(v_drop=[])
-    real_fit = catboost.fit
-    fits = []
-
-    def track(X, y, V, v, *args, **kwargs):
-        assert set(X.index) <= set(tr)
-        assert max(X.index) < min(V.index) <= max(V.index) < len(tr) + len(va)
-        fits.append(len(y))
-        return real_fit(X, y, V, v, *args, **kwargs)
-
-    monkeypatch.setattr(catboost, "fit", track)
-    baseline = runner.run_cell(transactions, tr, va, "F2", make, [SMALL], log, best)
-    folds = len(time_cv_folds(transactions, tr))
-    assert len(fits) == folds + 3
-    recorded = pd.read_csv(log)
-    assert set(recorded.split) == {"cv", "val"}
-    assert recorded.loc[recorded.split == "val", "seed"].tolist() == [0, 1, 2]
-    assert yaml.safe_load(best.read_text())["models"]["catboost"]["F2"]["params"] == baseline
-    runner.run_cell(transactions, tr, va, "F2", make, [SMALL], log, best)
-    assert len(fits) == folds + 3
-    recorded.drop(index=[0, len(recorded) - 1]).to_csv(log, index=False)
-    runner.run_cell(transactions, tr, va, "F2", make, [SMALL], log, best)
-    assert len(fits) == folds + 5
-    sweeps = {"depth": [2, 3]}
-    runner.run_sensitivity(transactions, tr, va, "F2", make, baseline, log, sweeps)
-    n_fits = len(fits)
-    runner.run_sensitivity(transactions, tr, va, "F2", make, baseline, log, sweeps)
-    assert len(fits) == n_fits == folds + 11
-    summary = runner.sensitivity_summary(log, "F2", baseline, sweeps)
-    assert summary.seeds.tolist() == [3, 3]
-    assert summary.tuned_baseline.tolist() == [False, True]
-    assert len(pd.read_csv(log)) == folds + 3 + 6
-
-
-def test_main_removes_test_rows_before_shared_features(transactions, tmp_path, monkeypatch):
-    path = tmp_path / "cleaned.parquet"
-    transactions.to_parquet(path)
-    tr, va, te = holdout_indices(transactions)
-    monkeypatch.setattr(runner, "check_manifest", lambda *args: None)
-    monkeypatch.setattr(data, "load_v_columns", lambda: ([], []))
-    requests = []
-
-    def build(frame, feature_set):
-        assert len(frame) == len(tr) + len(va)
-        assert not set(frame.index) & set(te)
-        requests.append(feature_set)
-        return build_feature_set(frame, feature_set)
-
-    def cell(frame, train, val, feature_set, make_pipeline, **kwargs):
-        np.testing.assert_array_equal(train, tr)
-        np.testing.assert_array_equal(val, va)
-        assert make_pipeline().fit(frame.iloc[tr]).columns_ == data.feature_columns(frame, [])
-
-    monkeypatch.setattr(runner, "build_feature_set", build)
-    monkeypatch.setattr(runner, "run_cell", cell)
-    runner.main(data_path=path)
-    assert requests == ["F0", "F1", "F2"]
-
-
-def test_manifest_checks_inputs_and_refuses_orphaned_runs(transactions, tmp_path, monkeypatch):
-    path = tmp_path / "cleaned.parquet"
-    transactions.to_parquet(path)
-    log, best, manifest = tmp_path / "log.csv", tmp_path / "best.yaml", tmp_path / "manifest.json"
-    runner.check_manifest(path, log, best, manifest)
-    original = manifest.read_bytes()
-    runner.check_manifest(path, log, best, manifest)
-    assert original == manifest.read_bytes()
-    monkeypatch.setattr(catboost, "GRID", [{"depth": 2}])
-    with pytest.raises(ValueError, match="inputs changed"):
-        runner.check_manifest(path, log, best, manifest)
-    assert original == manifest.read_bytes()
-    experiment.log_run(log, model="catboost", feature_set="F0", cv_scheme="time",
-                       split="cv", seed=0, params={"fold": 1}, pr_auc=0.4)
-    with pytest.raises(ValueError, match="no matching manifest"):
-        runner.check_manifest(path, log, best, tmp_path / "other_manifest.json")
-
-
-def test_sensitivity_report_requires_complete_unique_seeds(tmp_path, monkeypatch):
-    log = tmp_path / "log.csv"
-    baseline = {**SMALL, "depth": 3}
-    sweeps = {"depth": [2, 3]}
-    for params in runner.sensitivity_cases(baseline, sweeps):
-        actual = {k: v for k, v in params.items() if k != "_sweep"}
-        assert {k: v for k, v in actual.items() if k != "depth"} == {
-            k: v for k, v in baseline.items() if k != "depth"}
-        for seed in (0, 1):
-            experiment.log_run(log, model="catboost", feature_set="F2", cv_scheme="holdout",
-                               split="val", seed=seed, params=params, pr_auc=0.4 + seed * 0.01)
-    with pytest.raises(ValueError, match="Missing sensitivity"):
-        runner.sensitivity_summary(log, "F2", baseline, sweeps)
-    for params in runner.sensitivity_cases(baseline, sweeps):
-        experiment.log_run(log, model="catboost", feature_set="F2", cv_scheme="holdout",
-                           split="val", seed=2, params=params, pr_auc=0.42)
-    assert runner.sensitivity_summary(log, "F2", baseline, sweeps).pr_auc_mean.tolist() == [0.41, 0.41]
-    best = tmp_path / "best.yaml"
-    best.write_text(yaml.safe_dump({"models": {"catboost": {"F2": {"params": baseline}}}}))
-    monkeypatch.setattr(catboost, "SENSITIVITY", sweeps)
-    runner.write_sensitivity_report(log, "F2", best, tmp_path / "reports", tmp_path / "figures")
-    assert (tmp_path / "figures" / "sweep_catboost_F2_depth.png").stat().st_size > 0
-    assert "0.410000" in (tmp_path / "reports" / "catboost_sensitivity_F2.md").read_text()
-    experiment.log_run(log, model="catboost", feature_set="F2", cv_scheme="holdout",
-                       split="val", seed=2, params=params, pr_auc=0.42)
-    with pytest.raises(ValueError, match="Ambiguous duplicate"):
-        runner.sensitivity_summary(log, "F2", baseline, sweeps)
