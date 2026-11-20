@@ -1,4 +1,4 @@
-"""Role A: per-column data profile and V-column pruning proposal (Step 2).
+"""Per-column data profile and V-column pruning proposal (Step 2).
 
 Everything is computed on the training block only (first 80% by time, rows 0..472,431),
 so the validation and test blocks stay out of the V-column decision.

@@ -1,15 +1,12 @@
-"""MLP interface, training-only class weight, early stopping, determinism and logging."""
-import json
+"""MLP interface, training-only class weight, early stopping and determinism."""
 
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 
 from src import data
 from src.models import mlp
-from src.split import holdout_indices, time_cv_folds
-from src.train_trees import run_cell
+from src.split import holdout_indices
 
 
 @pytest.fixture
@@ -85,25 +82,6 @@ def test_without_validation_runs_exactly_max_epochs(matrices):
     assert refit.run_metadata["epochs_run"] == refit.run_metadata["best_epoch"] == rounds["max_epochs"]
     assert refit.run_metadata["val_pr_auc"] == []
     assert np.isfinite(mlp.predict_proba(refit, V)).all()
-
-
-def test_run_cell_logs_cv_and_three_seeds(transactions, tmp_path):
-    tr, va, _ = holdout_indices(transactions)
-    log, best_path = tmp_path / "log.csv", tmp_path / "best.yaml"
-    grid = [{"hidden": 8, "max_epochs": 3}, {"hidden": 16, "max_epochs": 3}]
-    make = lambda: data.LinearPipeline(v_drop=[])
-    best = run_cell(mlp, make, transactions, tr, va, "F0", grid, log_path=log, best_path=best_path)
-    df = pd.read_csv(log)
-    n_folds = len(time_cv_folds(transactions, tr))
-    assert (df.split == "cv").sum() == len(grid) * n_folds
-    assert sorted(df.loc[df.split == "val", "seed"]) == [0, 1, 2]
-    assert (df.split != "test").all()
-    fit = json.loads(df.loc[df.split == "val", "params"].iloc[0])["_fit"]
-    assert len(fit["val_pr_auc"]) == fit["epochs_run"]
-    assert yaml.safe_load(best_path.read_text())["models"]["mlp"]["F0"]["params"] == best
-    # rerunning resumes: no new rows
-    run_cell(mlp, make, transactions, tr, va, "F0", grid, log_path=log, best_path=best_path)
-    assert len(pd.read_csv(log)) == len(df)
 
 
 def test_class_weight_is_a_setting(matrices):

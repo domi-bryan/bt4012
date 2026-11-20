@@ -1,4 +1,4 @@
-"""Role A: PyTorch MLP on `LinearPipeline` output (Step 10).
+"""PyTorch MLP on `LinearPipeline` output (Step 10).
 
 Two ReLU hidden layers (hidden, hidden // 2) with dropout, Adam, mini-batches of 2,048 and
 BCEWithLogitsLoss with `pos_weight` "balanced" (negatives / positives of the training rows) or 1 (unweighted). With validation rows,

@@ -1,4 +1,4 @@
-"""Role C: append one row per training run to results/log.csv (Step 4)."""
+"""Append one row per training run to results/log.csv (Step 4)."""
 import csv
 import json
 import subprocess

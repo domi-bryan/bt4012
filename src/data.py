@@ -1,4 +1,4 @@
-"""Role A: load, join and save the time-sorted table; tree and linear preprocessing pipelines."""
+"""Load, join and save the time-sorted table; tree and linear preprocessing pipelines."""
 import warnings
 from pathlib import Path
 from tempfile import NamedTemporaryFile

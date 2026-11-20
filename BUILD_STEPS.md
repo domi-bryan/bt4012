@@ -1,6 +1,6 @@
 # Build steps
 
-Work through these in order. Each step names the role that owns it (see `Context.md`), the files it touches, what to do, and a **Done when** list. A step is finished only when every Done-when item is checked. Then append to `PROGRESS.md` and stop.
+The project was built in these steps, in order. Each step names the stage of the project it belongs to (EDA, feature engineering, modelling and so on), the files it touches, what was done, and a **Done when** list. A step was finished only when every Done-when item was checked, and each finished step has an entry in `PROGRESS.md`.
 
 `PROGRESS.md` entry format:
 
@@ -20,9 +20,9 @@ On 2026-11-14 the group moved from the F0–F2 feature sets and four models to t
 
 - **Part 1 (Steps 0–5, 7):** foundation. Still in force.
 - **Part 2 (Steps 6, 8–12):** the first pass on F0–F2. Finished and superseded; kept as a short record.
-- **Part 3 (Steps 13–19):** the G0–G3 build. This is the current plan.
+- **Part 3 (Steps 13–19):** the G0–G3 build, finished on 2026-11-18 with the final test scoring. The report uses its results only.
 
-Steps 0–12 keep their numbers, so earlier `PROGRESS.md` entries, the README and the `results/step*_manifest.json` files still point at the right step. The earlier Steps 13–15 were never started and are replaced:
+Steps 0–12 keep their numbers, so earlier `PROGRESS.md` entries and the README still point at the right step. The earlier Steps 13–15 were never started and are replaced:
 
 | Earlier step | Now |
 | --- | --- |
@@ -32,7 +32,7 @@ Steps 0–12 keep their numbers, so earlier `PROGRESS.md` entries, the README an
 
 Older text that says "Step 13", "Step 14" or "Step 15" (in `PROGRESS.md` entries for Steps 4–12, `reports/feature_dictionary.md` and `reports/uid_check.md`) uses the earlier meaning.
 
-Most G0–G3 work so far was logged in `PROGRESS.md` under descriptive titles without step numbers. Each Part 3 step lists those entries under **Earlier entries**. Check a step's Done-when list against them before starting it. New entries use the `## Step N:` heading again.
+Much of the G0–G3 work was logged in `PROGRESS.md` under descriptive titles without step numbers. Each Part 3 step lists those entries under **Earlier entries**; later entries use the `## Step N:` heading.
 
 ---
 
@@ -40,7 +40,7 @@ Most G0–G3 work so far was logged in `PROGRESS.md` under descriptive titles wi
 
 ## Step 0: Environment and data check
 
-**Role:** A
+**Stage:** Setup
 
 **Files:** `requirements.txt`, `.gitignore`, `src/__init__.py`, `tests/`, `PROGRESS.md`, `results/`
 
@@ -60,7 +60,7 @@ Most G0–G3 work so far was logged in `PROGRESS.md` under descriptive titles wi
 
 ## Step 1: Load, join, save
 
-**Role:** A
+**Stage:** Data preparation
 
 **Files:** `src/data.py`, `tests/test_data.py`
 
@@ -84,7 +84,7 @@ A later audit and cleaning pass (`src/data_audit.py`, `src/clean_data.py`) valid
 
 ## Step 2: Data profile and first V-column proposal
 
-**Role:** A
+**Stage:** EDA
 
 **Files:** `notebooks/01_eda.ipynb` (section 3; was `01_profile.ipynb`), `src/data_profile.py`, `reports/data_profile.md`, `config/features.yaml`
 
@@ -106,7 +106,7 @@ A later audit and cleaning pass (`src/data_audit.py`, `src/clean_data.py`) valid
 
 ## Step 3: Splits
 
-**Role:** C
+**Stage:** Experimental setup
 
 **Files:** `src/split.py`, `tests/test_split.py`
 
@@ -128,7 +128,7 @@ A later audit and cleaning pass (`src/data_audit.py`, `src/clean_data.py`) valid
 
 ## Step 4: Metrics and results log
 
-**Role:** C
+**Stage:** Experimental setup
 
 **Files:** `src/metrics.py`, `src/results.py`, `tests/test_metrics.py`
 
@@ -149,7 +149,7 @@ A later audit and cleaning pass (`src/data_audit.py`, `src/clean_data.py`) valid
 
 ## Step 5: Preprocessing pipelines
 
-**Role:** A
+**Stage:** Preprocessing
 
 **Files:** `src/data.py` (extend), `src/catboost_pipeline.py`, `tests/test_pipelines.py`
 
@@ -171,7 +171,7 @@ A later audit and cleaning pass (`src/data_audit.py`, `src/clean_data.py`) valid
 
 ## Step 7: Customer ID (uid) and check
 
-**Role:** B
+**Stage:** Feature engineering
 
 **Files:** `src/features.py`, `reports/uid_check.md`
 
@@ -192,23 +192,23 @@ The same uid definition is rebuilt in `src/domain_features.make_uid` for Step 14
 
 # Part 2: First pass on F0–F2 (finished, superseded)
 
-These steps ran between 2026-10-18 and 2026-10-22 on the F0–F2 feature sets (F0 raw, F1 + card1 aggregates, F2 + uid aggregates) with LR, RF, LightGBM and the MLP, plus an optional CatBoost run. Their full results are in `PROGRESS.md` and their rows stay in `results/log.csv` under feature sets F0, F1 and F2. They are not part of the current plan.
+These steps ran between 2026-10-18 and 2026-10-22 on the F0–F2 feature sets (F0 raw, F1 + card1 aggregates, F2 + uid aggregates) with LR, RF, LightGBM and the MLP, plus an optional CatBoost run. Their full results are in `PROGRESS.md` and their rows stay in `results/log.csv` under feature sets F0, F1 and F2. They are not part of the G0–G3 build or the report. Their training scripts, settings, manifests, summaries and notebooks (marked "removed" below) were deleted before submission and remain in the git history.
 
 | Step | What it built | Used by the G0–G3 build? |
 | --- | --- | --- |
 | 6: LR baseline on F0 | `src/models/logreg.py`, `src/experiment.py` (`time_cv`, `best_params`, `fit_validate`) | Yes: the model module and the experiment helpers. The C grid changed (Step 15). |
 | 8: Past-only aggregates F1, F2 | `src/features.py` (`past_aggregates`, `build_feature_set`), `reports/feature_dictionary.md` | No. G2 and G3 history features come from `src/domain_features.py` (Step 14). |
-| 9: Tree models on F0–F2 | `src/models/rf.py`, `src/models/lgbm.py`, `src/train_trees.py`, `config/best_params.yaml` | The model modules only. Grids, subsampling and early stopping changed (Step 15). |
-| 10: MLP on F0–F2 | `src/models/mlp.py`, `src/train_mlp.py` | The model module only. Search and early stopping changed (Step 15). |
-| 11: Grid summary | `src/summarise.py`, `reports/grid_validation.md` (4 x 3 table on F0–F2) | No. Replaced by `notebooks/10_model_comparison.ipynb` (Step 17). |
+| 9: Tree models on F0–F2 | `src/models/rf.py`, `src/models/lgbm.py`; `src/train_trees.py`, `config/best_params.yaml` (removed) | The model modules only. Grids, subsampling and early stopping changed (Step 15). |
+| 10: MLP on F0–F2 | `src/models/mlp.py`; `src/train_mlp.py` (removed) | The model module only. Search and early stopping changed (Step 15). |
+| 11: Grid summary | `src/summarise.py`, `reports/grid_validation.md` (4 x 3 table on F0–F2; removed) | No. Replaced by `notebooks/10_model_comparison.ipynb` (Step 17). |
 | 12: Leakage check on F2 | `src/leakage.py`, `reports/leakage_check.md`, `notebooks/11_leakage_check.ipynb` | The code is reused by Step 18. |
-| Optional CatBoost on F0–F2 (no step number) | `src/train_catboost.py`, `src/models/catboost.py`, `config/catboost_best_params.yaml`, `reports/catboost_sensitivity_F2.*` | The model module only. |
+| Optional CatBoost on F0–F2 (no step number) | `src/models/catboost.py`; `src/train_catboost.py`, `config/catboost_best_params.yaml`, `reports/catboost_sensitivity_F2.*` (removed) | The model module only. |
 
-Rules for this part:
+Notes on this part:
 
-- Do not rerun `src.train_trees`, `src.train_mlp` or `src.train_catboost`. `src.leakage` now runs the G3 check (Step 18) and no longer covers F2. The manifests of those three scripts fingerprint model code that has since changed, so they refuse to resume, and the old LightGBM and CatBoost settings can no longer be reproduced.
-- Their notebooks are in `notebooks/archive/` and are not meant to be rerun.
-- The report uses G0–G3 results only. `src/summarise.py` and `reports/grid_validation.md` stay as the F0–F2 record and are not regenerated.
+- `src.leakage` now runs the G3 check (Step 18) and no longer covers F2.
+- The removed scripts could not have been rerun as they were: their manifests fingerprinted model code that has since changed, and the old LightGBM and CatBoost settings can no longer be reproduced.
+- The report uses G0–G3 results only.
 
 ---
 
@@ -227,7 +227,7 @@ Models: logistic regression, random forest, LightGBM, XGBoost, CatBoost, MLP. Th
 
 ## Step 13: V-column threshold
 
-**Role:** A
+**Stage:** Feature selection
 
 **Files:** `notebooks/03_v_threshold.ipynb`, `src/feature_selection.py` (`prune_v`, `V_THRESHOLD`), `tests/test_feature_selection.py`
 
@@ -249,7 +249,7 @@ Models: logistic regression, random forest, LightGBM, XGBoost, CatBoost, MLP. Th
 
 ## Step 14: Feature table and the G0–G3 sets
 
-**Role:** B
+**Stage:** Feature engineering
 
 **Files:** `src/domain_features.py`, `src/feature_selection.py`, `src/feature_sets.py`, `notebooks/02_feature_engineering.ipynb`, `config/features_v2.yaml`, `data/processed/features_v2.parquet` (gitignored), `tests/test_domain_features.py`, `tests/test_v2_models.py`
 
@@ -277,7 +277,7 @@ Models: logistic regression, random forest, LightGBM, XGBoost, CatBoost, MLP. Th
 
 ## Step 15: Shared run code and the model notebook template
 
-**Role:** C, with each model's owner for its module
+**Stage:** Modelling
 
 **Files:** `src/experiment.py`, `src/models/*.py` (adds `xgb.py`; `GRID` in each), `src/segments.py`, `src/importance.py`, `src/metrics.py`, `notebooks/04_logreg.ipynb` to `09_mlp.ipynb` (one template), `tests/test_v2_models.py`
 
@@ -308,16 +308,18 @@ Models: logistic regression, random forest, LightGBM, XGBoost, CatBoost, MLP. Th
 
 ## Step 16: Run the six models on G0–G3
 
-Each notebook is one unit of work: finish it, check its Done-when list, write its `PROGRESS.md` entry (`## Step 16: <model> on G0–G3`), then stop.
+**Stage:** Modelling
 
-| Notebook | Model | Role | Rows to expect (CV + validation) | Earlier entries |
-| --- | --- | --- | --- | --- |
-| `04_logreg.ipynb` | Logistic regression | C | 44 + 12 | none |
-| `05_random_forest.ipynb` | Random forest | D | 48 + 12 | "Random forest and MLP on G0–G3", "Findings for random forest and MLP" |
-| `06_lightgbm.ipynb` | LightGBM | D | 80 + 12 | "LightGBM on G0–G3" |
-| `07_xgboost.ipynb` | XGBoost | extra model, no role in `Context.md` | 80 + 12 | "XGBoost on G0–G3" (older setup), "XGBoost rerun with the refit and the 3,000-tree cap" |
-| `08_catboost.ipynb` | CatBoost | extra model, no role in `Context.md` | 80 + 12 | "CatBoost on G0–G3" |
-| `09_mlp.ipynb` | MLP | A | 64 + 12 | "Random forest and MLP on G0–G3", "Findings for random forest and MLP" |
+Each notebook was one unit of work, with its own Done-when check and `PROGRESS.md` entry (`## Step 16: <model> on G0–G3`).
+
+| Notebook | Model | Rows to expect (CV + validation) | Earlier entries |
+| --- | --- | --- | --- |
+| `04_logreg.ipynb` | Logistic regression | 44 + 12 | none |
+| `05_random_forest.ipynb` | Random forest | 48 + 12 | "Random forest and MLP on G0–G3", "Findings for random forest and MLP" |
+| `06_lightgbm.ipynb` | LightGBM | 80 + 12 | "LightGBM on G0–G3" |
+| `07_xgboost.ipynb` | XGBoost | 80 + 12 | "XGBoost on G0–G3" (older setup), "XGBoost rerun with the refit and the 3,000-tree cap" |
+| `08_catboost.ipynb` | CatBoost | 80 + 12 | "CatBoost on G0–G3" |
+| `09_mlp.ipynb` | MLP | 64 + 12 | "Random forest and MLP on G0–G3", "Findings for random forest and MLP" |
 
 **Do**
 
@@ -339,7 +341,7 @@ Each notebook is one unit of work: finish it, check its Done-when list, write it
 
 ## Step 17: Model comparison
 
-**Role:** C
+**Stage:** Evaluation
 
 **Files:** `notebooks/10_model_comparison.ipynb`, `reports/feature_dictionary.md`
 
@@ -365,7 +367,7 @@ Each notebook is one unit of work: finish it, check its Done-when list, write it
 
 ## Step 18: Leakage check on G3
 
-**Role:** C
+**Stage:** Evaluation
 
 This replaces the Step 12 check on F2 as the report's leakage table.
 
@@ -389,19 +391,23 @@ This replaces the Step 12 check on F2 as the report's leakage table.
 
 ## Step 19: Final test scoring
 
-**Role:** C
+**Stage:** Evaluation
 
-**Run only after the user confirms the experiment freeze.** After the freeze no setting, threshold, feature set or model choice changes.
+Run once, after the group confirmed the experiment freeze on 2026-11-17. After the freeze no setting, threshold, feature set or model choice changed.
 
-**Files:** `notebooks/12_test.ipynb`, `reports/test_results.md`, `src/feature_sets.py` (a loader that includes the test block, used by this step only)
+**Files:** `src/final_test.py`, `src/ensemble.py`, `src/feature_sets.py` (`load_features_with_test`, a loader that includes the test block, used by this step only), `notebooks/13_ensemble_check.ipynb`, `notebooks/12_test.ipynb`, `reports/test_results.md`, `tests/test_final_test.py`, `tests/test_ensemble.py`
 
 **Do**
 
-1. For each of the 24 grid cells and seeds 0, 1, 2: refit the chosen settings on the train block exactly as in the validation run (`experiment.fit_final`, two fits for the early-stopping models), score the test block, apply the threshold stored in that cell's validation row, and log with split = test.
-2. Split test PR-AUC by known vs unknown customers with 95% bootstrap intervals (`src/segments.py`). A customer is known if the uid appears in the train block, the rows the scored model was fit on.
+1. Before the freeze, choose the segment blend in `13_ensemble_check` from the saved time-CV fold scores (never the validation block): on G3, known customers take XGBoost's scores and unknown customers a weighted blend of percentile ranks (CatBoost 0.6, LightGBM 0.2, XGBoost 0.1, random forest 0.1). Fix the weights in `src/ensemble.py` and log the blend's validation rows and threshold (`python -m src.ensemble --log-validation`).
+2. For each of the 24 grid cells and seeds 0, 1, 2 (`python -m src.final_test --model <name> --freeze-confirmed`, one model per process): refit the chosen settings on the train block exactly as in the validation run (`experiment.fit_final`, two fits for the early-stopping models), check that the refit reproduces the logged validation PR-AUC to within 1e-6, score the test block, apply the threshold stored in that cell's validation row, and log with split = test.
+3. Log the blend's test rows from the four input models' saved G3 test scores with its stored threshold (`python -m src.final_test --blend --freeze-confirmed`).
+4. Split test PR-AUC by known vs unknown customers with 95% bootstrap intervals (`src/segments.py`). A customer is known if the uid appears in the train block, the rows the scored model was fit on.
+5. Rebuild `reports/test_results.md` from the log (`python -m src.final_test --report`) and write the findings in section 6 of `12_test`.
 
 **Done when**
 
-- [ ] The log has exactly 72 test rows, one per cell and seed.
+- [ ] The log has exactly 75 test rows: 72 model rows (one per cell and seed) and 3 for the segment blend.
+- [ ] Every model test row reproduced its validation PR-AUC, and every test row uses the threshold stored in its validation row.
 - [ ] The 6 x 4 test table and the known vs unknown table are built from the log.
 - [ ] The validation-to-test change for each cell is reported.

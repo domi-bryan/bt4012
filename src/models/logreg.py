@@ -1,4 +1,4 @@
-"""Role C: logistic regression baseline (Step 6). Input is `LinearPipeline` output."""
+"""Logistic regression baseline (Step 6). Input is `LinearPipeline` output."""
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 

@@ -17,7 +17,7 @@ Group coursework benchmarking six fraud detection models on four cumulative feat
 - Seeds are 0, 1, 2. Set them for numpy, sklearn, lightgbm, xgboost, catboost and torch.
 - Load data as float32 and categoricals as `category`; the joined table is 590k x 436.
 - Train one model library per Python process and import it before anything else. On macOS, LightGBM, XGBoost and PyTorch each ship their own OpenMP runtime and crash when mixed.
-- The F0–F2 first pass (`BUILD_STEPS.md` Part 2) is history. Its scripts, manifests, log rows and archived notebooks stay as they are.
+- The F0–F2 first pass (`BUILD_STEPS.md` Part 2) is history. Its log rows stay as they are; its scripts, settings, manifests, summaries and notebooks were removed before submission (they remain in the git history).
 
 ## Guardrails
 
