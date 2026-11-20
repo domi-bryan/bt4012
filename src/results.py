@@ -54,7 +54,7 @@ def log_run(path=LOG_PATH, **fields):
             raise ValueError(f"{path} has an unexpected header: {header}")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=COLUMNS)
+        writer = csv.DictWriter(handle, fieldnames=COLUMNS, lineterminator="\n")   # the log is LF throughout
         if new:
             writer.writeheader()
         writer.writerow(row)

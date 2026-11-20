@@ -9,7 +9,10 @@ segment blend) → `12_test` (final test results).
 
 ## 1. Set up the environment
 
-Python 3.13 was used. From the repo root:
+Python 3.13 was used. `requirements.txt` pins the exact package versions of the environment that ran the test
+suite before submission. Members trained on their own machines (Python 3.12 to 3.14), and boosting and PyTorch
+results can differ slightly across library versions; `src.final_test` therefore checks that each refit
+reproduces its logged validation PR-AUC before it scores the test block (section 10). From the repo root:
 
 ```bash
 python3 -m venv .venv
@@ -88,7 +91,7 @@ This writes `reports/data_profile.md` and `config/features.yaml`, using the firs
 
 ## 5. Run exploratory data analysis
 
-After creating `cleaned.parquet`, run the EDA notebook locally (about 1 minute):
+After creating `cleaned.parquet`, run the EDA notebook locally (about 5 minutes):
 
 ```bash
 .venv/bin/python -m nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=600 notebooks/01_eda.ipynb

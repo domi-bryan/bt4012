@@ -4,7 +4,7 @@ Group coursework benchmarking six fraud detection models on four cumulative feat
 
 ## Read first
 
-- `Context.md`: the group's locked decisions (split, leakage rules, models, feature sets, tuning rules, metrics, roles). Treat it as the spec. A change to it needs the group's agreement, so propose it to the user instead of editing it.
+- `Context.md`: the group's locked decisions (split, leakage rules, models, feature sets, tuning rules, metrics). Treat it as the spec. A change to it needs the group's agreement, so propose it to the user instead of editing it.
 - `BUILD_STEPS.md`: the ordered build. Part 3 (Steps 13–19) is the current G0–G3 plan. Work one step at a time, in order, unless the user names a different step. In Step 16 each model notebook is one unit of work.
 - `PROGRESS.md`: what has been done so far. Most G0–G3 work was logged without step numbers, so find the next step by checking each Part 3 step's "Done when" list against the entries named under its "Earlier entries".
 

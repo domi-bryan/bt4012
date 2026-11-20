@@ -185,6 +185,11 @@ def results_table(log):
     return out
 
 
+def _missing(m, g):
+    """Text for a cell with no test rows: the blend is G3 only by design; anything else was not run."""
+    return "n/a" if m == "segment_blend" and g != "G3" else "not run"
+
+
 def render(log):
     t = results_table(log)
     order = [m for m in TABLE_MODELS if m in t.index.get_level_values(0)]
@@ -201,16 +206,20 @@ def render(log):
                 r = t.loc[(m, g)]
                 cells.append(f"{r['mean']:.4f} ± {r['std']:.4f}" + ("" if r["count"] == 3 else f" ({int(r['count'])} seeds)"))
             else:
-                cells.append("not run")
+                cells.append(_missing(m, g))
         lines.append(f"| {NAMES[m]} | " + " | ".join(cells) + " |")
     lines += ["", "## Change from validation to test (mean PR-AUC)", "",
               "| Model | " + " | ".join(FEATURE_SETS) + " |", "| --- |" + " --- |" * len(FEATURE_SETS)]
     for m in order:
-        cells = [f"{t.loc[(m, g), 'change']:+.4f}" if (m, g) in t.index else "not run" for g in FEATURE_SETS]
+        cells = [f"{t.loc[(m, g), 'change']:+.4f}" if (m, g) in t.index else _missing(m, g) for g in FEATURE_SETS]
         lines.append(f"| {NAMES[m]} | " + " | ".join(cells) + " |")
     n = int(((log.split == "test")).sum())
     lines += ["", f"Test rows in the log: {n} (expected {EXPECTED_TEST_ROWS}: 6 models x 4 sets x 3 seeds, "
-              "plus 3 for the segment blend on G3)."]
+              "plus 3 for the segment blend on G3). The blend is built on G3 only, so its G0–G2 cells are n/a.",
+              "", "## Known vs unknown customers", "",
+              "Test PR-AUC for known customers (uid seen in the train block) and unknown ones, with 95% bootstrap "
+              "intervals, is in `notebooks/12_test.ipynb` section 4. It is computed from the saved test scores in "
+              "`results/preds/` (shared on the group drive), not from the log, so this report does not rebuild it."]
     return "\n".join(lines) + "\n"
 
 

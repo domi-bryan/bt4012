@@ -95,6 +95,7 @@ def test_log_run_twice_gives_header_and_two_rows(tmp_path):
     assert json.loads(df["params"][0]) == {"C": 0.1, "fold": 1}
     assert df["precision"].isna().all()
     assert df["date"].notna().all()
+    assert b"\r" not in path.read_bytes()        # LF line endings, like the rest of results/log.csv
 
 
 @pytest.mark.parametrize("over,message", [
