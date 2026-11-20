@@ -44,7 +44,7 @@ SEEDS = experiment.VAL_SEEDS
 REPRO_TOL = 1e-6          # refit must reproduce the logged validation PR-AUC to within this
 REPORT_PATH = ROOT / "reports" / "test_results.md"
 FREEZE_MESSAGE = ("The test block is scored only after the group confirms the experiment freeze "
-                  "(CLAUDE.md, BUILD_STEPS.md Step 19). Pass freeze_confirmed=True / --freeze-confirmed "
+                  "(BUILD_STEPS.md Step 19). Pass freeze_confirmed=True / --freeze-confirmed "
                   "once that has happened.")
 
 

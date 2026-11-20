@@ -1,6 +1,6 @@
 # BT4012 Group 11: Fraud detection on IEEE-CIS (Vesta)
 
-Benchmark of six fraud detection models (logistic regression, random forest, LightGBM, XGBoost, CatBoost and an MLP) on four cumulative feature sets (G0–G3) of the IEEE-CIS Fraud Detection training data, plus a segment blend of the tree models. Final test results are in `reports/test_results.md`. Design decisions are in `Context.md`, the build order is in `BUILD_STEPS.md`, and finished work is logged in `PROGRESS.md`.
+Benchmark of six fraud detection models (logistic regression, random forest, LightGBM, XGBoost, CatBoost and an MLP) on four cumulative feature sets (G0–G3) of the IEEE-CIS Fraud Detection training data, plus a segment blend of the tree models. Final test results are in `reports/test_results.md`. Design decisions are in `Context.md` and the build order is in `BUILD_STEPS.md`.
 
 Notebooks, in reading order: `01_eda` (exploratory analysis) → `02_feature_engineering` (builds `features_v2`
 and the G0–G3 feature groups) → `03_v_threshold` (chooses the V-column threshold, r = 0.75) → one notebook per
@@ -252,8 +252,7 @@ In October the group ran a first pass on three feature sets, F0 (raw), F1 (+ car
 history), with logistic regression, random forest, LightGBM, the MLP and CatBoost. It was superseded by the G0–G3
 build and is not used in the report. Its training scripts, settings files, manifests, summaries and notebooks were
 removed before submission (they remain in the git history); its rows stay in `results/log.csv` under feature sets
-F0, F1 and F2 and are left out of every G0–G3 table. `PROGRESS.md` and Part 2 of `BUILD_STEPS.md` record what it
-found.
+F0, F1 and F2 and are left out of every G0–G3 table. Part 2 of `BUILD_STEPS.md` records what it found.
 
 ## Rules to keep in mind
 

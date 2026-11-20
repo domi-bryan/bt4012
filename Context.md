@@ -2,7 +2,7 @@
 
 Read this before working on any part of the project. It records what the group decided and why, so code and report text stay consistent with the approved proposal and the TA's feedback.
 
-Updated 2026-11-17 for the `features_v2` table, its G0–G3 feature sets and six models, and on 2026-11-20 for the experiment freeze, the segment blend and the final test scoring. The earlier plan (feature sets F0–F2, four models) was run as a first pass in October; it is recorded in `PROGRESS.md` and Part 2 of `BUILD_STEPS.md`.
+Updated 2026-11-17 for the `features_v2` table, its G0–G3 feature sets and six models, and on 2026-11-20 for the experiment freeze, the segment blend and the final test scoring. The earlier plan (feature sets F0–F2, four models) was run as a first pass in October; it is recorded in Part 2 of `BUILD_STEPS.md`.
 
 ## Project
 
