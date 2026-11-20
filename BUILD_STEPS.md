@@ -1,16 +1,6 @@
 # Build steps
 
-The project was built in these steps, in order. Each step names the stage of the project it belongs to (EDA, feature engineering, modelling and so on), the files it touches, what was done, and a **Done when** list. A step was finished only when every Done-when item was checked, and each finished step has an entry in `PROGRESS.md`.
-
-`PROGRESS.md` entry format:
-
-```
-## Step N: <name> (YYYY-MM-DD)
-- Built: <files>
-- Checks: <each Done-when item and its result>
-- Numbers: <key counts or scores, copied from output>
-- Open: <questions for the group, or "none">
-```
+The project was built in these steps, in order. Each step names the stage of the project it belongs to (EDA, feature engineering, modelling and so on), the files it touches, what was done, and a **Done when** list. A step was finished only when every Done-when item was checked.
 
 Prerequisite: `data/raw/train_transaction.csv` and `data/raw/train_identity.csv` from Kaggle (`kaggle competitions download -c ieee-fraud-detection`, unzip into `data/raw/`). Test files are not used.
 
@@ -22,7 +12,7 @@ On 2026-11-14 the group moved from the F0–F2 feature sets and four models to t
 - **Part 2 (Steps 6, 8–12):** the first pass on F0–F2. Finished and superseded; kept as a short record.
 - **Part 3 (Steps 13–19):** the G0–G3 build, finished on 2026-11-18 with the final test scoring. The report uses its results only.
 
-Steps 0–12 keep their numbers, so earlier `PROGRESS.md` entries and the README still point at the right step. The earlier Steps 13–15 were never started and are replaced:
+Steps 0–12 keep their numbers, so the README and earlier reports still point at the right step. The earlier Steps 13–15 were never started and are replaced:
 
 | Earlier step | Now |
 | --- | --- |
@@ -30,9 +20,7 @@ Steps 0–12 keep their numbers, so earlier `PROGRESS.md` entries and the README
 | 14: LightGBM gain and SHAP (RQ1) | Section 6 of each model notebook (Step 16) and the cross-model table in Step 17, using permutation importance. SHAP is not used. |
 | 15: final test scoring | Step 19 |
 
-Older text that says "Step 13", "Step 14" or "Step 15" (in `PROGRESS.md` entries for Steps 4–12, `reports/feature_dictionary.md` and `reports/uid_check.md`) uses the earlier meaning.
-
-Much of the G0–G3 work was logged in `PROGRESS.md` under descriptive titles without step numbers. Each Part 3 step lists those entries under **Earlier entries**; later entries use the `## Step N:` heading.
+Older text that says "Step 13", "Step 14" or "Step 15" (in `reports/feature_dictionary.md` and `reports/uid_check.md`) uses the earlier meaning.
 
 ---
 
@@ -42,14 +30,13 @@ Much of the G0–G3 work was logged in `PROGRESS.md` under descriptive titles wi
 
 **Stage:** Setup
 
-**Files:** `requirements.txt`, `.gitignore`, `src/__init__.py`, `tests/`, `PROGRESS.md`, `results/`
+**Files:** `requirements.txt`, `.gitignore`, `src/__init__.py`, `tests/`, `results/`
 
 **Do**
 
 1. Create the folders in `Context.md` (Repo layout) plus `tests/`, `reports/` and `data/processed/`.
 2. Write `requirements.txt`: pandas, pyarrow, numpy, scikit-learn (>=1.4), lightgbm, xgboost, catboost, torch, shap, matplotlib, seaborn, pytest, pyyaml, and nbformat, nbconvert, ipykernel to run the notebooks.
 3. Add `data/raw/` and `data/processed/` to `.gitignore`.
-4. Create `PROGRESS.md` with a one-line header.
 
 **Done when**
 
@@ -76,7 +63,7 @@ Much of the G0–G3 work was logged in `PROGRESS.md` under descriptive titles wi
 
 - [ ] Joined table has 590,540 rows, 20,663 with isFraud = 1, and 144,233 with has_identity = 1.
 - [ ] TransactionDT is non-decreasing down the saved file.
-- [ ] Peak memory and file size are recorded in PROGRESS.md.
+- [ ] Peak memory and file size are recorded.
 
 A later audit and cleaning pass (`src/data_audit.py`, `src/clean_data.py`) validates this table and saves an identical copy as `data/processed/cleaned.parquet`; no values were changed.
 
@@ -122,7 +109,7 @@ A later audit and cleaning pass (`src/data_audit.py`, `src/clean_data.py`) valid
 - [ ] Tests pass: holdout blocks are disjoint and cover every row; max TransactionDT of train <= min of validation <= min of test.
 - [ ] Each time fold's training rows are all earlier than its validation rows.
 - [ ] Group folds never place one group in both sides of a fold.
-- [ ] Fraud rate and row count of each block and each time fold are in PROGRESS.md.
+- [ ] Fraud rate and row count of each block and each time fold are recorded.
 
 ---
 
@@ -165,7 +152,7 @@ A later audit and cleaning pass (`src/data_audit.py`, `src/clean_data.py`) valid
 - [ ] `LinearPipeline` output has no NaN on validation rows.
 - [ ] A test confirms medians and scaler means equal those computed on training rows alone.
 - [ ] A test confirms a pipeline given `columns` uses exactly those columns.
-- [ ] Output column counts for each pipeline are in PROGRESS.md.
+- [ ] Output column counts for each pipeline are recorded.
 
 ---
 
@@ -192,7 +179,7 @@ The same uid definition is rebuilt in `src/domain_features.make_uid` for Step 14
 
 # Part 2: First pass on F0–F2 (finished, superseded)
 
-These steps ran between 2026-10-18 and 2026-10-22 on the F0–F2 feature sets (F0 raw, F1 + card1 aggregates, F2 + uid aggregates) with LR, RF, LightGBM and the MLP, plus an optional CatBoost run. Their full results are in `PROGRESS.md` and their rows stay in `results/log.csv` under feature sets F0, F1 and F2. They are not part of the G0–G3 build or the report. Their training scripts, settings, manifests, summaries and notebooks (marked "removed" below) were deleted before submission and remain in the git history.
+These steps ran between 2026-10-18 and 2026-10-22 on the F0–F2 feature sets (F0 raw, F1 + card1 aggregates, F2 + uid aggregates) with LR, RF, LightGBM and the MLP, plus an optional CatBoost run. Their rows stay in `results/log.csv` under feature sets F0, F1 and F2. They are not part of the G0–G3 build or the report. Their training scripts, settings, manifests, summaries and notebooks (marked "removed" below) were deleted before submission and remain in the git history.
 
 | Step | What it built | Used by the G0–G3 build? |
 | --- | --- | --- |
@@ -243,8 +230,6 @@ Models: logistic regression, random forest, LightGBM, XGBoost, CatBoost, MLP. Th
 - [ ] Section 6 of the notebook states the decision with a table read from the log. The decision is r = 0.75.
 - [ ] The group's agreement is recorded in the notes of `config/features_v2.yaml`.
 
-**Earlier entries:** none of its own. Mentioned in "EDA notebooks combined" and "Repo cleanup before the G0–G3 model update".
-
 ---
 
 ## Step 14: Feature table and the G0–G3 sets
@@ -270,8 +255,6 @@ Models: logistic regression, random forest, LightGBM, XGBoost, CatBoost, MLP. Th
 - [ ] The past-only helpers (prior count, mean, max, previous value, distinct values, trailing windows, frequencies) pass their tests against hand-worked or brute-force values.
 - [ ] `load_features()` returns no test-block rows (test).
 - [ ] The notebook is executed top to bottom and committed with outputs.
-
-**Earlier entries:** none of its own. `src/feature_sets.py` is recorded in "Model notebooks on the G0–G3 feature sets".
 
 ---
 
@@ -302,24 +285,22 @@ Models: logistic regression, random forest, LightGBM, XGBoost, CatBoost, MLP. Th
 - [ ] `tests/test_v2_models.py` passes, covering: resume skips logged fits; early-stopping rows are the last 10% of each training part and never overlap scored rows; the refit trains on the whole training part with the stopping point from the first fit; older-setup rows are rerun and left out of summaries; `fit_final` reproduces the logged validation PR-AUC.
 - [ ] Every model runs end to end through `tune_and_validate` on a sample of the real `features_v2`, logging to a scratch file, with `results/log.csv` unchanged.
 
-**Earlier entries:** "Model notebooks on the G0–G3 feature sets", "Known vs unknown customer segments", "Model notebook results sections and precision in the top 1%", "Same subsampling for the three boosting models", "Fair early stopping and comparable search budgets", "Precision–recall curves and feature importance", "Same L2 regularisation search for the three boosting models", "RQ4: setting sensitivity from the tuning runs", "Early stopping refit and a higher tree cap".
-
 ---
 
 ## Step 16: Run the six models on G0–G3
 
 **Stage:** Modelling
 
-Each notebook was one unit of work, with its own Done-when check and `PROGRESS.md` entry (`## Step 16: <model> on G0–G3`).
+Each notebook was one unit of work, with its own Done-when check.
 
-| Notebook | Model | Rows to expect (CV + validation) | Earlier entries |
-| --- | --- | --- | --- |
-| `04_logreg.ipynb` | Logistic regression | 44 + 12 | none |
-| `05_random_forest.ipynb` | Random forest | 48 + 12 | "Random forest and MLP on G0–G3", "Findings for random forest and MLP" |
-| `06_lightgbm.ipynb` | LightGBM | 80 + 12 | "LightGBM on G0–G3" |
-| `07_xgboost.ipynb` | XGBoost | 80 + 12 | "XGBoost on G0–G3" (older setup), "XGBoost rerun with the refit and the 3,000-tree cap" |
-| `08_catboost.ipynb` | CatBoost | 80 + 12 | "CatBoost on G0–G3" |
-| `09_mlp.ipynb` | MLP | 64 + 12 | "Random forest and MLP on G0–G3", "Findings for random forest and MLP" |
+| Notebook | Model | Rows to expect (CV + validation) |
+| --- | --- | --- |
+| `04_logreg.ipynb` | Logistic regression | 44 + 12 |
+| `05_random_forest.ipynb` | Random forest | 48 + 12 |
+| `06_lightgbm.ipynb` | LightGBM | 80 + 12 |
+| `07_xgboost.ipynb` | XGBoost | 80 + 12 |
+| `08_catboost.ipynb` | CatBoost | 80 + 12 |
+| `09_mlp.ipynb` | MLP | 64 + 12 |
 
 **Do**
 
@@ -335,7 +316,6 @@ Each notebook was one unit of work, with its own Done-when check and `PROGRESS.m
 - [ ] `results/importance/<model>_G3.csv` exists, and `results/preds/` holds 12 validation files and 4 fold-score files for the model.
 - [ ] Section 7 is written and every number in it matches a table in the notebook.
 - [ ] Boosting models only: the number of fits that stopped within 50 trees of the 3,000 cap is recorded.
-- [ ] The `PROGRESS.md` entry gives the chosen settings, their mean time-CV PR-AUC, validation PR-AUC per set and the run time.
 
 ---
 
@@ -360,8 +340,6 @@ Each notebook was one unit of work, with its own Done-when check and `PROGRESS.m
 - [ ] Every code cell ran without error and the outputs are committed.
 - [ ] Section 6 is written and every number in it matches a table in the notebook.
 - [ ] Each of the five inputs with the best average permutation rank has a one-line plain description in `reports/feature_dictionary.md` (carried over from the earlier Step 14).
-
-**Earlier entries:** none for the run. The notebook's sections were built in the Step 15 entries.
 
 ---
 
