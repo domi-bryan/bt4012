@@ -454,3 +454,8 @@ OPENBLAS_NUM_THREADS=6 OMP_NUM_THREADS=6 VECLIB_MAXIMUM_THREADS=6 .venv/bin/pyth
   - CatBoost, random forest, the MLP and logistic regression score unknown customers higher. Logistic regression falls to 0.0380 on known customers.
   - The blend uses XGBoost's scores on known customers (0.7973) and has the best unknown-customer score (0.5742 [0.551, 0.597]). That is above CatBoost's 0.5629, but the intervals overlap.
 - Open: Context.md does not record the freeze date. The 3 blend test rows came in with CRLF line endings: `src/results.py` writes with `csv.DictWriter`'s default `\r\n`, while the rest of the log is LF.
+
+## Step 19 follow-up: README and 12_test findings (2026-11-20)
+- `notebooks/12_test.ipynb` section 6: wrote the findings in place of the placeholder (best on test, models vs feature sets, validation to test, known vs unknown customers, precision and recall at the stored threshold, the blend vs XGBoost). Only that markdown cell changed; the outputs are those of the run in 728d057. Every number is quoted from the notebook's tables, plus the validation known vs unknown table in `10_model_comparison` section 3.
+- `README.md`: removed stale text (XGBoost "being added", the V-column list "pending group approval", "a possible ensemble", the test block "not scored until the freeze"); added `13_ensemble_check` and `12_test` to the reading order, and new sections 14 (segment blend) and 15 (final test scoring: `src.final_test --model / --blend / --report`, the reproduction check, 75 test rows). The tests section is now 16.
+- Checks: full test suite passes (143 passed); no code, log or notebook output changed.

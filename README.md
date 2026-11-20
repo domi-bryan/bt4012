@@ -1,11 +1,11 @@
 # BT4012 Group 11: Fraud detection on IEEE-CIS (Vesta)
 
-Benchmark of fraud detection models (logistic regression, random forest, LightGBM, MLP and CatBoost; XGBoost is being added) on the IEEE-CIS Fraud Detection training data. Design decisions are in `Context.md`, the build order is in `BUILD_STEPS.md`, and finished work is logged in `PROGRESS.md`.
+Benchmark of six fraud detection models (logistic regression, random forest, LightGBM, XGBoost, CatBoost and an MLP) on four cumulative feature sets (G0–G3) of the IEEE-CIS Fraud Detection training data, plus a segment blend of the tree models. Final test results are in `reports/test_results.md`. Design decisions are in `Context.md`, the build order is in `BUILD_STEPS.md`, and finished work is logged in `PROGRESS.md`.
 
 Notebooks, in reading order: `01_eda` (exploratory analysis) → `02_feature_engineering` (builds `features_v2`
 and the G0–G3 feature groups) → `03_v_threshold` (chooses the V-column threshold, r = 0.75) → one notebook per
-model (`04_logreg` to `09_mlp`) → `10_model_comparison` → `11_leakage_check`. Superseded notebooks are in
-`notebooks/archive/`.
+model (`04_logreg` to `09_mlp`) → `10_model_comparison` → `11_leakage_check` → `13_ensemble_check` (chooses the
+segment blend) → `12_test` (final test results). Superseded notebooks are in `notebooks/archive/`.
 
 ## 1. Set up the environment
 
@@ -76,7 +76,7 @@ are preserved. V-column pruning is not applied.
 
 - The loaded table keeps NaN as NaN. Missingness is itself a signal (most rows have no identity record), so nothing is dropped or filled at load time.
 - Imputation, scaling and encoding are fitted transforms. `TreePipeline` and `LinearPipeline` in `src/data.py` fit on each fold's training rows only. Never fit a transform on the whole table.
-- V-column pruning is proposed in `config/features.yaml` under `v_columns_proposed`. The pipelines currently use that list provisionally, with a warning, pending group approval.
+- V-column pruning: the group agreed to drop V columns correlated above r = 0.75 with a kept one (`notebooks/03_v_threshold.ipynb`), and the G0–G3 feature sets in `config/features_v2.yaml` use only that rule. The older r > 0.9 list in `config/features.yaml` was used only by the F0–F2 first pass (sections 7–12), and `src/data.py` still warns that this older list is unapproved whenever it is loaded.
 
 To regenerate the data profile and V-column proposal (about 1 minute):
 
@@ -141,7 +141,7 @@ Each model has its own notebook: `04_logreg`, `05_random_forest`, `06_lightgbm`,
    validates those settings on every set; `TUNE_ON = None` tunes each set separately.
 3. Every fit appends a row to `results/log.csv`, and anything already logged is skipped, so a notebook can be
    stopped and rerun. Validation scores (and, with `SAVE_OOF`, the time-CV fold scores of the chosen settings) are
-   saved to `results/preds/` (gitignored) for the comparison and a possible ensemble.
+   saved to `results/preds/` (gitignored) for the comparison and the segment blend.
 
 Each model notebook reports, per feature set, PR-AUC (main metric), AUROC, recall and precision in the top 1% of
 scores, and precision and recall at the F1 threshold chosen on validation, plus precision–recall curves, known vs
@@ -161,10 +161,10 @@ command above (use a long timeout, e.g. `--ExecutePreprocessor.timeout=-1`, as f
 
 On macOS, XGBoost, PyTorch and LightGBM each ship their own OpenMP library and can crash when combined in one
 process. Each model notebook imports only its own model library first, which is safe; don't train several model
-libraries in one kernel. The XGBoost test runs in a separate process for the same reason.
+libraries in one kernel. For the same reason the XGBoost test and the LightGBM final-test test run in separate processes.
 
 Sections 7 to 12 describe the earlier F0–F2 experiments (Steps 6–11), kept for reference. Section 13 is the
-leakage check on G3.
+leakage check on G3, section 14 the segment blend and section 15 the final test scoring.
 
 ## 7. Logistic regression baseline (Step 6)
 
@@ -301,7 +301,50 @@ log. `notebooks/11_leakage_check.ipynb` reads the log and saves `reports/figures
 The first version of this check ran on F2 (Step 12, `results/step12_manifest.json`). Its rows
 stay in the log; the report and notebook now show G3 only.
 
-## 14. Run the tests
+## 14. Segment blend (ensemble check)
+
+`notebooks/13_ensemble_check.ipynb` chooses the blend from the saved time-CV fold scores and checks it on the
+validation block. Scores are turned into percentile ranks within the scored block, and each transaction is
+blended by whether its customer is known (`uid` seen in the train block; `src/segments.py`):
+
+- known customers: XGBoost only;
+- unknown customers: CatBoost 0.6, LightGBM 0.2, XGBoost 0.1, random forest 0.1.
+
+The weights were picked from every weighting in steps of 0.1 (286 for the four models) by mean PR-AUC over the four
+time-CV folds, never on the validation block. They are fixed in `src/ensemble.py` (`BLEND_KNOWN`,
+`BLEND_UNKNOWN`), on G3 only. The blend needs no training; it logs its validation rows (and the F1 threshold) from
+the saved validation scores of the four models:
+
+```bash
+.venv/bin/python -m src.ensemble --log-validation
+```
+
+## 15. Final test scoring (Step 19)
+
+The test block (the last 10% by time, 59,054 rows) was scored once, after the group agreed the experiment freeze on
+17 Nov 2026. No setting, threshold, feature set or model choice changed after the freeze.
+
+```bash
+.venv/bin/python -u -m src.final_test --model xgboost --freeze-confirmed   # one model per process
+.venv/bin/python -u -m src.final_test --blend --freeze-confirmed           # after XGBoost, LightGBM, CatBoost and RF
+.venv/bin/python -m src.final_test --report                                # rebuilds reports/test_results.md
+```
+
+`--model` takes `logreg`, `rf`, `lgbm`, `xgboost`, `catboost` or `mlp`. For each of the model's 12 cells (G0–G3 x
+seeds 0, 1, 2) it refits the settings from the cell's validation row on the train block exactly as in validation
+(same rows, seed and two-step early stopping), checks that the refit reproduces the logged validation PR-AUC to
+within 1e-6 (and stops with "would not belong" otherwise), then scores the test block with the threshold stored at
+validation and logs one row with `split = test`. Test scores go to `results/preds/<model>_<set>_test_seed<seed>.parquet`.
+Cells already logged are skipped, so a run can be stopped and restarted. Results can differ slightly across
+machines and library versions, which is why the reproduction check comes first: a test row is only logged for the
+model that was validated, whichever member's machine ran it.
+
+`--blend` combines the four input models' saved G3 test scores with the fixed weights (each input file must
+reproduce its logged test PR-AUC) and applies the blend's stored validation threshold. The log then holds 75 test
+rows: 6 models x 4 sets x 3 seeds, plus 3 for the blend. `notebooks/12_test.ipynb` reads them and shows the test
+tables, the change from validation to test, known vs unknown customers on test, and the blend against XGBoost.
+
+## 16. Run the tests
 
 ```bash
 .venv/bin/python -m pytest -q tests
@@ -312,7 +355,7 @@ Tests that need the real table are skipped if `joined.parquet` has not been buil
 ## Rules to keep in mind
 
 - Seeds are 0, 1, 2.
-- The last 10% of rows by time (the test block) is not scored until the group declares the experiment freeze.
+- The last 10% of rows by time (the test block) was not scored until the experiment freeze (17 Nov 2026), and then only once, by `src.final_test`.
 - Every feature uses only transactions earlier in time than the row it describes.
 - Every training run appends one row to `results/log.csv`.
 - Notebooks are committed with their outputs, so the results and plots can be read on GitHub
